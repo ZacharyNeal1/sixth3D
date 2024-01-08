@@ -312,6 +312,16 @@ namespace sixth3D
         {
             var watch = System.Diagnostics.Stopwatch.StartNew();
 
+            /* how my collisions work:
+             * keep in mind this is a small project (compared to a full game game engine) so i cheaped out when it came to collisions
+             * its pretty simple tho 
+             * i first iterate over all the colliders and make sure they are in the right position (based on rotaion) and such
+             * then i check if any points (vertices) are within another collider 
+             * i do this by transfroming said point so the other collider is centered at 0,0,0 without rotaion
+             * then i do the same fomula as aabb 
+             */
+
+
             foreach (Object3d o in WorldObjects) o.FixColliders();
 
             for (int i = 0; i < WorldObjects.Length; i ++)
@@ -341,15 +351,12 @@ namespace sixth3D
                                         var colPoints2 = collider.points;
 
                                         var ob1Rot = ob1.rotation;
-                                        var ob2Rot = ob2.rotation;
+
                                         Matrix4x4 m1rot = Matrix4x4.CreateFromYawPitchRoll(ob1Rot.Y, ob1Rot.X,ob1Rot.Z);
-                                        Matrix4x4 m2rot = Matrix4x4.CreateFromYawPitchRoll(ob2Rot.Y, ob2Rot.X, ob2Rot.Z);
                                         Matrix4x4.Invert(m1rot,out m1rot);
                                         Matrix4x4 m1pos = Matrix4x4.CreateWorld(ob1.position, Vector3.UnitZ, Vector3.UnitY);
-                                        Matrix4x4 m2pos = Matrix4x4.CreateWorld(ob2.position, Vector3.UnitZ, Vector3.UnitY);
 
                                         
-
                                         for (int b = 0; b < colPoints2.Length; b++)
                                         {
                                             bool[] hits = { false, false, false };
@@ -380,35 +387,6 @@ namespace sixth3D
                                             }
 
                                         }
-
-
-
-                                        //double[] ob2Values = new double[6] //sets all the values to the avrage i guess
-                                        //{ob2.position.X, ob2.position.X,
-                                        // ob2.position.Y, ob2.position.Y,
-                                        // ob2.position.Z, ob2.position.Z};
-                                        //double[] ob1Values = new double[6]
-                                        //{ob1.position.X, ob1.position.X,
-                                        // ob1.position.Y, ob1.position.Y,
-                                        // ob1.position.Z, ob1.position.Z};
-
-                                        //for (int finder = 0; finder < 8; finder++)
-                                        //{
-                                        //    ob1Values[0] = Math.MinMagnitude(ob1Values[0], colPoints1[finder].X);
-                                        //    ob1Values[2] = Math.MinMagnitude(ob1Values[2], colPoints1[finder].Y);
-                                        //    ob1Values[4] = Math.MinMagnitude(ob1Values[4], colPoints1[finder].Z);
-                                        //    ob1Values[1] = Math.MaxMagnitude(ob1Values[1], colPoints1[finder].X);
-                                        //    ob1Values[3] = Math.MaxMagnitude(ob1Values[3], colPoints1[finder].Y);
-                                        //    ob1Values[5] = Math.MaxMagnitude(ob1Values[5], colPoints1[finder].Z);
-
-                                        //    ob2Values[0] = Math.MinMagnitude(ob2Values[0], colPoints2[finder].X);
-                                        //    ob2Values[2] = Math.MinMagnitude(ob2Values[2], colPoints2[finder].Y);
-                                        //    ob2Values[4] = Math.MinMagnitude(ob2Values[4], colPoints2[finder].Z);
-                                        //    ob2Values[1] = Math.MaxMagnitude(ob2Values[1], colPoints2[finder].X);
-                                        //    ob2Values[3] = Math.MaxMagnitude(ob2Values[3], colPoints2[finder].Y);
-                                        //    ob2Values[5] = Math.MaxMagnitude(ob2Values[5], colPoints2[finder].Z);
-                                        //}
-
                                     }
                                 }
                             }

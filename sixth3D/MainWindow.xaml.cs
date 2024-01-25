@@ -210,7 +210,7 @@ namespace sixth3D
                 holding.position = (Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, Matrix4x4.CreateFromYawPitchRoll(camRot.Y, camRot.X, camRot.Z)) * 2000f) + camPos);
             FullCollide();
 
-          
+
         }
         Object3d holding;
         void CheckKeys()
@@ -340,7 +340,7 @@ namespace sixth3D
         Touch Raycast(Vector3 startingPoint, Vector3 dir, float distance)
         {
             bool touched = false;
-            Touch t = null ;
+            Touch t = null;
             foreach (Object3d ob1 in WorldObjects) if (ob1.colliders != null) foreach (Collider collider in ob1.colliders)
                     {
                         var ob2Rot = ob1.rotation;
@@ -409,7 +409,7 @@ namespace sixth3D
             var t = (Vector3.Dot(planeNormal, planePoint) - Vector3.Dot(planeNormal, linePos)) / Vector3.Dot(planeNormal, lineDir);
             var final = linePos + (lineDir * t);
 
-            if (Vector3.Distance(final,linePos) < distance)
+            if (Vector3.Distance(final, linePos) < distance)
                 return final;
             else
                 return Vector3.Zero;
@@ -480,15 +480,12 @@ namespace sixth3D
                 if (current != null) foreach (Collider collider in current) collider.hit = false;
             }
 
-
             for (int a = 0; a < WorldObjects.Length; a++)
             {
                 var ob1 = WorldObjects[a];
                 if (ob1.colliders != null)
-                {
                     foreach (Collider mainCol in ob1.colliders)
                     {
-
                         for (int wo = 0; wo < WorldObjects.Length; wo++)
                         {
                             if (wo != a && WorldObjects[wo].colliders != null)
@@ -496,12 +493,12 @@ namespace sixth3D
                                 var ob2 = WorldObjects[wo];
                                 foreach (Collider collider in ob2.colliders)
                                 {
-                                    var points = collider.points;
                                     int currentTouch = -1;
                                     int currentTouchB = -1;
                                     var check = new Touch(mainCol, collider);
-                                    //removes the existing touch
-                                    for (int i = 0; i < mainCol.touchingColliders.Count; i++)
+
+                                    //finds the touch
+                                    for (int i = 0; i < mainCol.touchingColliders.Count; i++) //finds the touch 
                                     {
                                         if (check.Equals(mainCol.touchingColliders[i]))
                                         {
@@ -519,15 +516,10 @@ namespace sixth3D
                                     bool touched = false;
                                     if (Vector3.Distance(collider.position, mainCol.position) < collider.initalDistance + mainCol.initalDistance)//if the two colliders are close
                                     {
-                                        var ob1Rot = ob1.rotation;
-
-                                        Matrix4x4 m1rot = Matrix4x4.CreateFromYawPitchRoll(ob1Rot.Y, ob1Rot.X, ob1Rot.Z);
-                                        Matrix4x4.Invert(m1rot, out m1rot);
-                                        Matrix4x4 m1pos = Matrix4x4.CreateWorld(ob1.position, Vector3.UnitZ, Vector3.UnitY);
                                         for (int i = 0; i < collidingLines.Length; i += 2)
                                         {
                                             var line0 = collider.points[collidingLines[i]];
-                                            var line1 = collider.points[collidingLines[i+1]];
+                                            var line1 = collider.points[collidingLines[i + 1]];
 
                                             var lineDirrectionUnit = Vector3.Normalize(line1 - line0);
                                             var lineLength = (line1 - line0).Length();
@@ -544,7 +536,7 @@ namespace sixth3D
                                                 var dir = Vector3.Cross(plane[1] - plane[0], plane[2] - plane[0]);
                                                 var normal = dir / dir.Length();
 
-                                                var point = LinePlane(center,normal,line0, lineDirrectionUnit,lineLength/2);
+                                                var point = LinePlane(center, normal, line0, lineDirrectionUnit, lineLength / 2);
                                                 if (point != Vector3.Zero)
                                                 {
 
@@ -620,14 +612,13 @@ namespace sixth3D
 
                             var ra = Vector3.Normalize(touch.bodyA.position - touch.point);
 
-                           // ob1.angularVelocity += ra * Vector3.Dot(-normal, Vector3.Normalize(ob1.velocity + (Vector3.One * 0.001f)) ) * (ob2.weight / ob1.weight);
+                            // ob1.angularVelocity += ra * Vector3.Dot(-normal, Vector3.Normalize(ob1.velocity + (Vector3.One * 0.001f)) ) * (ob2.weight / ob1.weight);
                             //ob1.velocity += normal * (ob2.weight / ob1.weight);
-                           // ob1.position += normal * ob2.scale.Y;
+                            // ob1.position += normal * ob2.scale.Y;
                             //inital velocitys: 
 
                         }
                     }
-                }
             }
 
 
@@ -640,7 +631,7 @@ namespace sixth3D
                 if (g != null)
                 {
                     g.Fill = Brushes.BurlyWood;
-                    g.Points = new PointCollection() { new Point(0, 10), new Point(watch.ElapsedMilliseconds*1000, 10), new Point(watch.ElapsedMilliseconds*1000, 20), new Point(0, 20) };
+                    g.Points = new PointCollection() { new Point(0, 10), new Point(watch.ElapsedMilliseconds * 1000, 10), new Point(watch.ElapsedMilliseconds * 1000, 20), new Point(0, 20) };
                     debugCanvas.Children[1] = g;
                 }
 
@@ -1057,8 +1048,8 @@ namespace sixth3D
         }
         public Touch(Touch t)
         {
-            this.bodyA= t.bodyA;
-            this.bodyB= t.bodyB;
+            this.bodyA = t.bodyA;
+            this.bodyB = t.bodyB;
             this.point = t.point;
             this.normal = t.normal;
         }

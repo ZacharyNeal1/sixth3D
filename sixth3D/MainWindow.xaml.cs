@@ -168,13 +168,13 @@ namespace sixth3D
             WorldObjects = new Object3d[] { ob3, ob2, ob1, ob4, ob5, ob6 };
             float d = 2f / 20f;
             float dist = 400f;
-            for (float i = 0; i < 6f; i += d)
-            {
-                Object3d[] a = { new Object3d(points, faces) };
-                a[0].position += new Vector3((float)(Math.Cos(i) * dist), 0, (float)(Math.Sin(i) * dist));
-                WorldObjects = WorldObjects.Concat(a).ToArray();
+            //for (float i = 0; i < 6f; i += d)
+            //{
+            //    Object3d[] a = { new Object3d(points, faces) };
+            //    a[0].position += new Vector3((float)(Math.Cos(i) * dist), 0, (float)(Math.Sin(i) * dist));
+            //    WorldObjects = WorldObjects.Concat(a).ToArray();
 
-            }
+            //}
 
 
 
@@ -403,13 +403,18 @@ namespace sixth3D
             5,4,7,6,
             7,6,2,3
         };
-
         Vector3 LinePlane(Vector3 planePoint, Vector3 planeNormal, Vector3 linePos, Vector3 lineDir, float distance)
         {
+            lineDir = Vector3.Normalize(lineDir);
+
+            if (Vector3.Dot(planeNormal, lineDir) == 0) return Vector3.Zero;
+
+            if (Vector3.Distance(planePoint, linePos) > distance) return Vector3.Zero;
+
             var t = (Vector3.Dot(planeNormal, planePoint) - Vector3.Dot(planeNormal, linePos)) / Vector3.Dot(planeNormal, lineDir);
             var final = linePos + (lineDir * t);
 
-            if (Vector3.Distance(final, linePos) < distance)
+            if (Vector3.Distance(linePos + (lineDir * distance/2), final) < distance/2)
                 return final;
             else
                 return Vector3.Zero;
@@ -522,7 +527,7 @@ namespace sixth3D
                                             var line1 = collider.points[collidingLines[i + 1]];
 
                                             var lineDirrectionUnit = Vector3.Normalize(line1 - line0);
-                                            var lineLength = (line1 - line0).Length();
+                                            var lineLength = Vector3.Distance(line0, line1);
                                             for (int f = 0; f < defaultColliderFaces.Length; f += 4)
                                             {
                                                 Vector3[] plane =
@@ -536,34 +541,46 @@ namespace sixth3D
                                                 var dir = Vector3.Cross(plane[1] - plane[0], plane[2] - plane[0]);
                                                 var normal = dir / dir.Length();
 
-                                                var point = LinePlane(center, normal, line0, lineDirrectionUnit, lineLength / 2);
+                                                var point = LinePlane(center, normal, line0, lineDirrectionUnit, lineLength);
+                                                //if (point == Vector3.Zero)
+                                                //point = LinePlane(center, normal, line0, lineDirrectionUnit, lineLength);
                                                 if (point != Vector3.Zero)
                                                 {
 
-                                                    var ab = plane[1] - plane[0];
-                                                    var am = point - plane[0];
+                                                    //var ab = plane[1] - plane[0];
+                                                    //var am = point - plane[0];
 
-                                                    var bc = plane[2] - plane[1];
-                                                    var bm = point - plane[1];
+                                                    //var bc = plane[2] - plane[1];
+                                                    //var bm = point - plane[1];
+
+                                                    //((0 <= Vector3.Dot(ab, am)) && (Vector3.Dot(ab, am) <= Vector3.Dot(ab, ab)))
+                                                    //&&
+                                                    //((0 <= Vector3.Dot(bc, bm)) && (Vector3.Dot(bc, bm) <= Vector3.Dot(bc, bc)))
+                                                    var u = Vector3.Normalize(plane[1] - plane[0]);
+                                                    var v = Vector3.Normalize(Vector3.Cross(u, normal));
+
+                                                    var x = Vector3.Dot(center - point, u);
+                                                    var y = Vector3.Dot(center - point, v);
 
                                                     if (
-                                                        ((0 <= Vector3.Dot(ab, am)) && (Vector3.Dot(ab, am) <= Vector3.Dot(ab, ab)))
+                                                        Math.Abs(x) < 50f
                                                         &&
-                                                        ((0 <= Vector3.Dot(bc, bm)) && (Vector3.Dot(bc, bm) <= Vector3.Dot(bc, bc)))
+                                                        Math.Abs(y) < 50f
                                                         )
                                                     {
                                                         touched = true;
-                                                        var t = new Touch(mainCol, collider, point, normal);
+                                                        tb.Text += "\n" + x + " " + y;
+                                                        var t = new Touch(mainCol, collider, point, normal,i);
 
                                                         if (currentTouch == -1)
                                                             mainCol.touchingColliders.Add(t);
                                                         else
                                                             mainCol.touchingColliders[currentTouch] = t;
 
-                                                        if (currentTouchB == -1)
-                                                            collider.touchingColliders.Add(t);
-                                                        else
-                                                            collider.touchingColliders[currentTouchB] = t;
+                                                        //if (currentTouchB == -1)
+                                                        //    collider.touchingColliders.Add(t);
+                                                        //else
+                                                        //    collider.touchingColliders[currentTouchB] = t;
 
 
                                                         goto DoubleBreak;
@@ -582,8 +599,8 @@ namespace sixth3D
                                     {
                                         if (currentTouch != -1)
                                             mainCol.touchingColliders.RemoveAt(currentTouch);
-                                        if (currentTouchB != -1)
-                                            collider.touchingColliders.RemoveAt(currentTouchB);
+                                        //if (currentTouchB != -1)
+                                        //    collider.touchingColliders.RemoveAt(currentTouchB);
 
                                     }
                                 }
@@ -750,6 +767,8 @@ namespace sixth3D
                             {
                                 var r = RenderPoint(Vector3.Transform(Vector3.Transform(Vector3.Transform(touching.point, firstPosition), firstRotate), secondRotate));
                                 var a = RenderPoint(Vector3.Transform(Vector3.Transform(Vector3.Transform(touching.point + touching.normal * 100f, firstPosition), firstRotate), secondRotate));
+
+
                                 if (debugCanvas.Children.Count > index)
                                 {
                                     var l = debugCanvas.Children[index] as Polyline;
@@ -768,6 +787,31 @@ namespace sixth3D
                                     line.Stroke = Brushes.Green;
                                     line.StrokeThickness = 1.5;
                                     debugCanvas.Children.Add(line);
+                                }
+                                if (touching.index != null)
+                                {
+                                    index++;
+                                    var r2 = RenderPoint(Vector3.Transform(Vector3.Transform(Vector3.Transform(touching.bodyB.points[collidingLines[touching.index]], firstPosition), firstRotate), secondRotate));
+                                    var a2 = RenderPoint(Vector3.Transform(Vector3.Transform(Vector3.Transform(touching.bodyB.points[collidingLines[touching.index + 1]], firstPosition), firstRotate), secondRotate));
+                                    if (debugCanvas.Children.Count > index)
+                                    {
+                                        var l = debugCanvas.Children[index] as Polyline;
+                                        l.Points = new PointCollection() { r2, a2 };
+                                        if (avg < 0)
+                                            l.Stroke = Brushes.Transparent;
+                                        else
+                                        {
+                                            l.Stroke = Brushes.LightGoldenrodYellow;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        System.Windows.Shapes.Polyline line = new Polyline();
+                                        line.Points = new PointCollection() { r2, a2 };
+                                        line.Stroke = Brushes.Green;
+                                        line.StrokeThickness = 1.5f;
+                                        debugCanvas.Children.Add(line);
+                                    }
                                 }
                             }
                             index++;
@@ -1027,12 +1071,21 @@ namespace sixth3D
         public Vector3 point { get; set; }
         public Vector3[] pointPlane { get; set; }
         public Vector3 normal { get; set; }
+        public int index { get; set; }
         public Touch(Collider a, Collider b, Vector3 c, Vector3 d)
         {
             bodyA = a;
             bodyB = b;
             point = c;
             normal = d;
+        }
+        public Touch(Collider a, Collider b, Vector3 c, Vector3 d, int i)
+        {
+            bodyA = a;
+            bodyB = b;
+            point = c;
+            normal = d;
+            index = i;
         }
         public Touch(Collider a, Collider b, Vector3 c, Vector3[] d)
         {

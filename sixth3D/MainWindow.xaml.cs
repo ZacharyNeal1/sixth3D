@@ -28,6 +28,7 @@ using System.Globalization;
 using System.IO;
 using System.ComponentModel;
 using System.Xml;
+using System.Windows.Media.Effects;
 
 namespace sixth3D
 {
@@ -138,9 +139,9 @@ namespace sixth3D
 
 
             ob1.position += new Vector3(0, 0f, 100f);
-            ob2.position += new Vector3(690f, 0, 150f);
+            ob2.position += new Vector3(700f, 0, 700f);
             ob3.position += new Vector3(100f, 0, 240f);
-            ob5.position += new Vector3(600f, 0, 400f);
+            ob5.position += new Vector3(700f, -1000f, 700f);
             ob6.position += new Vector3(640f, -200, 240f);
 
             ob6.rotation = new Vector3(1f, 1f, 1f);
@@ -266,7 +267,7 @@ namespace sixth3D
                 if (holding != null) holding = null;
                 else
                 {
-                    var t = Raycast(camPos, Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, Matrix4x4.CreateFromYawPitchRoll(camRot.Y, camRot.X, camRot.Z))), 1000f);
+                    var t = Raycast(camPos, Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, Matrix4x4.CreateFromYawPitchRoll(camRot.Y, camRot.X, camRot.Z))), 5000f);
                     if (t != null) holding = t.bodyA.possibleParent;
                 }
 
@@ -335,11 +336,9 @@ namespace sixth3D
 
         const float airDensity = 1.204f; //kg/m^3
         const float gravity = 9.8f * 100f;
-        const float defaultVeloctyDecay = 0.95f;
+        const float defaultVeloctyDecay = 0.985f;
         const float floorYValue = 100f;
         const HitReaction floorReaction = HitReaction.Solid;
-
-
         Touch Raycast(Vector3 startingPoint, Vector3 dir, float distance)
         {
             bool touched = false;
@@ -417,74 +416,111 @@ namespace sixth3D
             var t = (Vector3.Dot(planeNormal, planePoint) - Vector3.Dot(planeNormal, linePos)) / Vector3.Dot(planeNormal, lineDir);
             var final = linePos + (lineDir * t);
 
-            if (Vector3.Distance(linePos + (lineDir * distance/2), final) < distance/2)
+            if (Vector3.Distance(linePos + (lineDir * distance / 2), final) < distance / 2)
                 return final;
             else
                 return Vector3.Zero;
         }
-        float GetImpulse(Touch touch)
+        const float floorWeight = 1000f;
+        Vector3 floorPos = Vector3.UnitY * floorYValue;
+
+        float Impulse(Collider bodyA, Vector3 point)
         {
-            var a = touch.bodyA;
-            var b = touch.bodyB;
-            var ap = a.possibleParent;
-            var bp = b.possibleParent;
-
-            var m1 = 1 / ap.weight;
-            var m2 = 1 / bp.weight;
-
-            var d1 = a.position - touch.point;
-            var d2 = b.position - touch.point;
-
-            var nd1 = Vector3.Cross(touch.normal,d1);
-            var nd2 = Vector3.Cross(touch.normal,d2);
-
-            var mReduction = 1 /
-                (
-                m1 + Vector3.Dot(nd1, a.position * nd1) +
-                m2 + Vector3.Dot(nd2, b.position * nd2)
-                );
-
-
-            var impactSpeed = Vector3.Dot(touch.normal,
-                (bp.velocity + Vector3.Cross(d1, bp.angularVelocity)) -
-                (ap.velocity + Vector3.Cross(d2, ap.angularVelocity))
-                );
-
-
-
-            return (mReduction * impactSpeed);
-        }
-
-        float GetFloorImpulse(Collider bodyA, Vector3 point)
-        {
-            var normal = -Vector3.UnitY;
+            var normal = Vector3.UnitY;
 
             var a = bodyA;
             var ap = a.possibleParent;
 
-            var m1 = 1 / ap.weight;
+            var pMa = ap.velocity;
+            var pMb = Vector3.Zero;
+            var rel = pMa - pMb;
 
-            var d1 = a.position - point;
+            var vMrel = Vector3.Dot(normal, rel);
 
-            var nd1 = Vector3.Cross(normal, d1);
+            if (Math.Abs((pMa + pMb).Length()) < RESTING_TOLERANCE) //tests for resting collisions
+            {
+                tb.Text += "\n skipped";
+                return 0f; //skip all the math 
+            }
 
-            var mReduction = 1 /
-                (
-                m1 + Vector3.Dot(nd1, a.position * nd1)
-                );
+            var e = ap.bouncyness;
 
-            var impactSpeed = Vector3.Dot(normal,
-                -(ap.velocity + Vector3.Cross(d1, ap.angularVelocity))
-                );
+            var r1 = point - a.position;
+            var r2 = point - floorPos;
 
+            var masses = (1 / ap.weight) + (1 / floorWeight);
 
+            var rn1 = Vector3.Cross(r1, normal);
+            var rn2 = Vector3.Cross(r2, normal);
 
-            return mReduction * impactSpeed;
+            var Irn1 = rn1 - a.position;
+            var Irn2 = rn2 - floorPos;
+
+            var Irn1Ra = Vector3.Cross(Irn1, r1);
+            var Irn2Ra = Vector3.Cross(Irn2, r2);
+
+            var dot1 = Vector3.Dot(normal, Irn1Ra);
+            var dot2 = Vector3.Dot(normal, Irn2Ra);
+
+            var denom = masses + dot1 + dot2;
+
+            var numerator = -(1 + e) * vMrel;
+
+            var j = numerator / denom;
+
+            return (float)j;
+        }
+        float ImpulseB(Touch touch)
+        {
+            var normal = -touch.normal;
+
+            var a = touch.bodyA;
+            var ap = a.possibleParent;
+            var b = touch.bodyB;
+            var bp = b.possibleParent;
+
+            var pMa = ap.velocity;
+            var pMb = bp.velocity;
+            var rel = pMa - pMb;
+
+            var vMrel = Vector3.Dot(normal, rel);
+
+            if (Math.Abs((pMa + pMb).Length()) < RESTING_TOLERANCE) //tests for resting collisions
+            {
+                tb.Text += "\n skipped";
+                return 0f; //skip all the math 
+            }
+
+            var point = touch.point;
+            var e = ap.bouncyness;
+
+            var r1 = point - a.position;
+            var r2 = point - floorPos;
+
+            var masses = (1 / ap.weight) + (1 / bp.weight);
+
+            var rn1 = Vector3.Cross(r1, normal);
+            var rn2 = Vector3.Cross(r2, normal);
+
+            var Irn1 = rn1 - a.position;
+            var Irn2 = rn2 - b.position;
+
+            var Irn1Ra = Vector3.Cross(Irn1, r1);
+            var Irn2Ra = Vector3.Cross(Irn2, r2);
+
+            var dot1 = Vector3.Dot(normal, Irn1Ra);
+            var dot2 = Vector3.Dot(normal, Irn2Ra);
+
+            var denom = masses + dot1 + dot2;
+
+            var numerator = -(1 + e) * vMrel;
+
+            var j = numerator / denom;
+
+            return (float)j;
         }
 
-
-
-
+        const float RESTING_TOLERANCE = 0.001f;
         void FullCollide()
         {
 
@@ -510,8 +546,11 @@ namespace sixth3D
 
 
 
-                    if (/*o.velocity.Y > terminalVelocity*/ false)
+                    if (o.velocity.Y > terminalVelocity)
+                    {
+                        tb.Text += "\n term";
                         o.velocity = new Vector3(o.velocity.X, o.velocity.Y * defaultVeloctyDecay, o.velocity.Z);
+                    }
                     else
                         o.velocity += new Vector3(0, scaledGravity, 0);
 
@@ -519,31 +558,36 @@ namespace sixth3D
                     if (o.colliders != null)
                     {
                         foreach (Collider c in o.colliders)
-                            foreach (Vector3 v in c.points)
-                                if (v.Y > floorYValue)
-                                {
-                                        if (floorReaction == HitReaction.Solid)
-                                    {
-                                        var imp = GetFloorImpulse(c,v);
-                                        if (imp > 0.01f)
-                                        {
-                                            o.angularVelocity -= Vector3.Cross(imp*-Vector3.UnitY,(o.position-v));
-                                        }
-                                        o.position += new Vector3(0, (floorYValue - v.Y) / 2, 0);
-                                        o.velocity += ((-imp / o.weight) * -Vector3.UnitY); 
-                                    }
-                                }
+                        {
+                            var v = o.position;
+                            for (int i = 0; i < 8; i++) if (c.points[i].Y > v.Y) v = c.points[i];
+                            if (v.Y > floorYValue)
+                            {
+                                var normal = -Vector3.UnitY;
+
+                                var ar = v - o.position;
+                                var j = Impulse(c, v);
+                                var jn = j * normal;
+                                tb.Text += "\n" + j.ToString();
+                                tb.Text += "\n" + o.angularVelocity.ToString();
+                                //o.velocity = o.velocity + (jn / 1f);
+                                o.angularVelocity = o.angularVelocity - Vector3.Cross(ar, jn);
+
+                                o.position += new Vector3(0, -(v.Y - floorYValue) / 2, 0);
+                            }
+                        }
+                        //moveing position based on velocity below
+                        o.position += o.velocity * (float)scaledTime;
+                        o.velocity *= (1f-(float)scaledTime) * o.velocityDecay;
+
+                        o.rotation += o.angularVelocity * (float)scaledTime;
+                        if (o.rotation.Length() > (Vector3.One * (float)Math.PI * 2f).Length())
+                            o.rotation -= (Vector3.One * (float)Math.PI * 2f);
+                        o.angularVelocity *= (1f - (float)scaledTime) * o.angularVelocityDecay;
+
+                        o.oldVelocity = o.velocity;
                     }
-                    //moveing position based on velocity below
-                    o.position += o.velocity * (float)scaledTime;
-                    o.velocity *= 1f - ((1f - o.velocityDecay) * (float)scaledTime);
-
-                    o.rotation += o.angularVelocity * (float)scaledTime;
-                    o.angularVelocity -= ((1f - o.velocityDecay) * o.angularVelocity) * (float)scaledTime;
-
-                    o.oldVelocity = o.velocity;
                 }
-
             }
 
             //collisions below
@@ -564,9 +608,6 @@ namespace sixth3D
                         {
                             if (wo != a && WorldObjects[wo].colliders != null)
                             {
-                                List<Vector3[]> planes = new List<Vector3[]>();
-
-
                                 var ob2 = WorldObjects[wo];
                                 foreach (Collider collider in ob2.colliders)
                                 {
@@ -632,7 +673,7 @@ namespace sixth3D
                                                         touched = true;
                                                         tb.Text += "\n" + x + " " + y;
 
-                                                        var t = new Touch(mainCol, collider, point, normal,i);
+                                                        var t = new Touch(mainCol, collider, point, normal, i);
 
                                                         if (currentTouch == -1) //adds the touch class (or) changes the current one
                                                             mainCol.touchingColliders.Add(t);
@@ -666,38 +707,13 @@ namespace sixth3D
                         foreach (Touch touch in mainCol.touchingColliders)
                         {
                             tb.Text += "\n" + touch.bodyA.ID + "   " + touch.bodyB.ID;
-                            //var ob2 = touch.bodyB.possibleParent;
 
-                            //Vector3 normal = Vector3.Normalize(touch.plane.Normal);
-                            //Vector3 angularChangeA = Vector3.One * normal;
-                            //angularChangeA = Vector3.Cross(angularChangeA, touch.point);
-                            var ob2 = touch.bodyB.possibleParent;
-                            var pointPlane = touch.pointPlane;
-                            Vector3 normal;
-                            if (touch.pointPlane != null)
-                                normal = Vector3.Normalize(Vector3.Cross(pointPlane[1] - pointPlane[0], pointPlane[2] - pointPlane[0]));
-                            else
-                            {
-                                normal = Vector3.Normalize(touch.normal);
-                                if (Vector3.Distance(normal + touch.point, touch.bodyA.position) > Vector3.Distance(-normal + touch.point, touch.bodyA.position))
-                                    normal = -normal;
-                            }
+                            var j = ImpulseB(touch);
+                            var jn = j * touch.normal;
 
-                            var ra = Vector3.Normalize(touch.bodyA.position - touch.point);
-                            var rb = Vector3.Normalize(touch.bodyB.position - touch.point);
-
-                            var imp = GetImpulse(touch);
-
-                            var j = imp * touch.normal;
-
-                            var scale = (ob2.scale.X + ob2.scale.Y + ob2.scale.Z) / 3;
-
-                            if (ob1.angularVelocity == Vector3.Zero)
-                                ob1.angularVelocity = ra / ob1.weight;
-                            else
-                            ob1.angularVelocity -= Vector3.Cross(j, ra);
-                            ob1.velocity -= j/ob1.weight;
-                            ob1.position -= rb*scale;
+                            ob1.position += (ob1.position - touch.bodyB.position);
+                            ob1.velocity = ob1.velocity + (jn/ob1.weight);
+                            ob1.angularVelocity = ob1.angularVelocity - Vector3.Cross(touch.point - ob1.position,jn);
                             //inital velocitys: 
 
                         }
@@ -705,7 +721,7 @@ namespace sixth3D
             }
 
 
-
+            foreach (Object3d o in WorldObjects) o.FixColliders();
 
             watch.Stop();
             if (debugCanvas.Children.Count > 1)
@@ -714,7 +730,7 @@ namespace sixth3D
                 if (g != null)
                 {
                     g.Fill = Brushes.BurlyWood;
-                    g.Points = new PointCollection() { new Point(0, 10), new Point(watch.ElapsedMilliseconds * 10,10), new Point(watch.ElapsedMilliseconds * 10, 20), new Point(0, 20) };
+                    g.Points = new PointCollection() { new Point(0, 10), new Point(watch.ElapsedMilliseconds * 10, 10), new Point(watch.ElapsedMilliseconds * 10, 20), new Point(0, 20) };
                     debugCanvas.Children[1] = g;
                 }
 
@@ -885,6 +901,14 @@ namespace sixth3D
 
 
                     }
+                }
+            }
+            if (index < debugCanvas.Children.Count)
+            {
+                for (int i = index; i < debugCanvas.Children.Count; i++)
+                {
+                    var l = debugCanvas.Children[index] as Polyline;
+                    l.Visibility = Visibility.Hidden;
                 }
             }
         }
@@ -1195,9 +1219,9 @@ namespace sixth3D
         public MovementType movementType { get; set; }
         public Vector3 oldVelocity { get; set; }
         public Vector3 velocity { get; set; }
-        public float elastic { get; set; }
         public Vector3 angularVelocity { get; set; }
         public float velocityDecay { get; set; }
+        public float angularVelocityDecay { get; set; }
         public float weight { get; set; }
         public float drag { get; set; }
         public float gravityScale { get; set; }
@@ -1245,13 +1269,13 @@ namespace sixth3D
         public void Initalize()
         {
             gravityScale = 1;
-            weight = 100;
+            weight = 100f;
             drag = 0.5f;
-            velocityDecay = 0.95f;
+            velocityDecay = 0.985f;
+            angularVelocityDecay = 0.985f;
             bouncyness = 0.2f;
             allowRotaion = true;
             oldVelocity = Vector3.Zero;
-            elastic = 0.5f;
             movementType = MovementType.Frozen;
             if (colliders != null) movementType = MovementType.All;
         }
@@ -1317,5 +1341,3 @@ namespace sixth3D
 
     }
 }
-
-

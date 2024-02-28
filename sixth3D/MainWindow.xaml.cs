@@ -32,6 +32,8 @@ using System.Windows.Media.Effects;
 using Accord.Math;
 using System.Runtime.InteropServices;
 using Accord;
+using System.Text.Json.Nodes;
+using Plane = System.Numerics.Plane;
 
 namespace sixth3D
 {
@@ -153,7 +155,8 @@ namespace sixth3D
             ob5.position += new Vector3(700f, -400f, 700f);
             ob6.position += new Vector3(640f, -200, 240f);
 
-            ob6.rotation = new Vector3(1f, 1f, 1f);
+            //ob6.rotation = new Vector3(1f, 1f, 1f);
+
 
             //ob6.velocity = new Vector3(100, 100, 100);
 
@@ -168,14 +171,20 @@ namespace sixth3D
 
             Object3d ob4 = new Object3d(points1, faces1);
             ob4.position += new Vector3(0f, 0, 0f);
-            ob2.rotation += new Vector3(-0.1f, 0.1f, 0.1f);
+            //ob2.rotation += new Vector3(-0.1f, 0.1f, 0.1f);
             ob5.rotation += new Vector3(0.1f, -0.1f, 0.1f);
 
-            ob2.weight = 3000f;
+            //ob2.weight = 3000f;
 
             ob2.Initalize();
             ob6.Initalize();
             ob5.Initalize();
+
+
+            //ob5.bouncyness = 0;
+            //ob2.bouncyness = 0;
+
+            //ob2.scale = new Vector3(2f, 2f, 2f);
 
             //ob6.scale = new Vector3(0.1f, 0.1f, 0.1f);
             //ob6.angularVelocity = new Vector3(0, 1, 0);
@@ -205,13 +214,12 @@ namespace sixth3D
 
             FullCanvas.Children.Add(new System.Windows.Shapes.Ellipse()
             {
-                RenderTransform = new TranslateTransform() { X = wind.Width / 2f, Y = wind.Height / 2f },
+                RenderTransform = new TranslateTransform() { X = wind.Width / 2f + 5f, Y = wind.Height / 2f + 5f },
                 Fill = Brushes.Red,
                 Height = 10f,
                 Width = 10f
             });
-            FullCanvas.
-            PreviewMouseMove += new MouseEventHandler(OnPreviewMouseMove);
+            //PreviewMouseMove += new MouseEventHandler(OnPreviewMouseMove);
             //ShowCursor(false);
         }
         [DllImport("user32.dll")]
@@ -233,8 +241,20 @@ namespace sixth3D
                 Key.E,
                 Key.O,
                 Key.P,
-                Key.T
             };
+
+        Key[] toggles =
+        {
+            Key.R,
+            Key.Q
+        };
+        bool[] toggleStates =
+        {
+            false,
+            false
+        };
+
+
 
 
         private void ConstantTimerUpdate(object sender, EventArgs e)
@@ -244,7 +264,7 @@ namespace sixth3D
             if (holding != null)
             {
                 FindForward();
-                holding.velocity += ((camPos+ forward * 150f)-holding.position) * new Vector3(0.8f,1.2f,0.8f);
+                holding.velocity += ((camPos + forward * 150f) - holding.position) * new Vector3(0.8f, 1.2f, 0.8f);
             }
             if (simulate)
                 FullCollide();
@@ -321,9 +341,10 @@ namespace sixth3D
             {
                 camRot += new Vector3(-lookSpeed, 0, 0);
             }
-            if (Math.Abs(camRot.Y) > 6f) camRot = new Vector3(camRot.X, 0, camRot.Z);
+            if (camRot.Length() > (Vector3.One * MathF.PI * 2f).Length())
+                camRot -= (Vector3.One * MathF.PI * 2f);
+            //    if (Math.Abs(camRot.Y) > 2f * MathF.PI) camRot = new Vector3(camRot.X, 2f, camRot.Z);
             //FullRender();
-
 
             if (Keyboard.IsKeyDown(inputs[8]))
             {
@@ -348,6 +369,28 @@ namespace sixth3D
             }
             if (Keyboard.IsKeyDown(inputs[9])) simulate = false;
             if (Keyboard.IsKeyDown(inputs[10])) simulate = true;
+
+            if (Keyboard.IsKeyDown(toggles[0]))
+            {
+                if (toggleStates[0] == false)
+                {
+                    renderColliders = !renderColliders;
+
+                }
+                toggleStates[0] = true;
+            }
+            else toggleStates[0] = false;
+
+            if (Keyboard.IsKeyDown(toggles[1]))
+            {
+                if (toggleStates[1] == false)
+                {
+                    FullCollide();
+
+                }
+                toggleStates[1] = true;
+            }
+            else toggleStates[1] = false;
         }
         bool simulate = true;
         Point RenderPoint(Vector3 a)
@@ -371,7 +414,7 @@ namespace sixth3D
         }
         public Vector3 camPoint(Vector3 point)
         {
-            return Vector3.Transform(Vector3.Transform(Vector3.Transform(point, firstRotate), secondRotate), firstPosition);
+            return Vector3.Transform(Vector3.Transform(Vector3.Transform(point, firstPosition), firstRotate), secondRotate);
         }
         Vector3 GetClosestPointOnLineSegment(Vector3 A, Vector3 B, Vector3 P)
         {
@@ -453,7 +496,7 @@ namespace sixth3D
                                     Math.Abs(y) < mainCol.size.X
                                     )
                                 {
-                                    tb.Text += "\n" + x + " " + y;
+                                    //  tb.Text += "\n" + x + " " + y;
 
                                     t = new Touch(mainCol, null, point, normal);
 
@@ -551,7 +594,7 @@ namespace sixth3D
                 return final;
             else
                 return Vector3.Zero;
-        } //not my funciton
+        } //not my funciton (edited and modifyed by me)
         const float floorWeight = 1000f;
         Vector3 floorPos = Vector3.UnitY * floorYValue;
 
@@ -562,41 +605,31 @@ namespace sixth3D
             var a = bodyA;
             var ap = a.possibleParent;
 
-            var pMa = ap.velocity + Vector3.Cross(ap.angularVelocity, point - a.position);
-            var pMb = Vector3.Zero;
-            var rel = pMa - pMb;
-
-            var vMrel = Vector3.Dot(normal, rel);
             var e = ap.bouncyness;
 
-            var r1 = point - a.position;
-            var r2 = point - floorPos;
+            var pMa = ap.velocity + Vector3.Cross(ap.angularVelocity, point - a.position);
+            var pMb = Vector3.Zero;
+            var rel = Vector3.Dot(normal, pMa - pMb);
 
-            var masses = (1 / ap.weight) + (1 / floorWeight);
+            var ra = point - a.position; //ra
+            var rb = point - floorPos; //rb
 
-            var rn1 = Vector3.Cross(r1, normal);
-            var rn2 = Vector3.Cross(r2, normal);
+            var nTerm1 = Vector3.Dot(ap.velocity - Vector3.Zero, normal);
+            var nTerm2 = Vector3.Dot(Vector3.Cross(ra, normal), ap.angularVelocity);
+            var nTerm3 = Vector3.Dot(Vector3.Cross(rb, normal), ap.angularVelocity);
 
-            var term3 = Vector3.Dot(normal, Vector3.Cross(rn1 - a.position, r1));
-            var term4 = Vector3.Dot(normal, Vector3.Cross(rn2 - floorPos, r2));
+            var numerator = nTerm1 + nTerm2 - nTerm3;
 
-            //var Irn1 = rn1 - a.position;
-            //var Irn2 = rn2 - floorPos;
+            var masses = (1 / ap.weight) /*+ (1 / bp.weight)*/;
 
-            //var Irn1Ra = Vector3.Cross(Irn1, r1);
-            //var Irn2Ra = Vector3.Cross(Irn2, r2);
-
-            //var dot1 = Vector3.Dot(normal, Irn1Ra);
-            //var dot2 = Vector3.Dot(normal, Irn2Ra);
+            var term3 = Vector3.Dot(normal, Vector3.Cross(Vector3.Cross(ra, normal), ra));
+            var term4 = Vector3.Dot(normal, Vector3.Cross(Vector3.Cross(rb, normal), rb));
 
             var denom = masses + term3 + term4;
 
+            var j = (numerator / denom) * -(1 + e);
 
-            var numerator = -(1 + e) * vMrel;
-
-            var j = numerator / denom;
-
-            return ((float)j, vMrel);
+            return ((float)j, rel);
         }
         (float, float) ImpulseB(Touch touch)
         {
@@ -606,43 +639,40 @@ namespace sixth3D
             var ap = a.possibleParent;
             var b = touch.bodyB;
             var bp = b.possibleParent;
+
             var e = ap.bouncyness;
+
             var point = touch.point;
 
             var pMa = ap.velocity + Vector3.Cross(ap.angularVelocity, point - a.position);
             var pMb = bp.velocity + Vector3.Cross(bp.angularVelocity, point - b.position);
             var rel = Vector3.Dot(normal, pMa - pMb);
 
-            var numerator = -(1 + e) * rel;
+            var ra = point - a.position; //ra
+            var rb = point - b.position; //rb
 
+            var nTerm1 = Vector3.Dot(ap.velocity - bp.velocity, normal);
+            var nTerm2 = Vector3.Dot(Vector3.Cross(ra, normal), ap.angularVelocity);
+            var nTerm3 = Vector3.Dot(Vector3.Cross(rb, normal), ap.angularVelocity);
 
-            var r1 = point - a.position; //ra
-            var r2 = point - floorPos; //rb
+            var numerator = nTerm1 + nTerm2 - nTerm3;
 
             var masses = (1 / ap.weight) + (1 / bp.weight);
 
-            var rn1 = Vector3.Cross(r1, normal);
-            var rn2 = Vector3.Cross(r2, normal);
-
-            var term3 = Vector3.Dot(normal, Vector3.Cross(rn1 - a.position, r1));
-            var term4 = Vector3.Dot(normal, Vector3.Cross(rn2 - b.position, r2));
+            var term3 = Vector3.Dot(normal, Vector3.Cross(Vector3.Cross(ra, normal), ra));
+            var term4 = Vector3.Dot(normal, Vector3.Cross(Vector3.Cross(rb, normal), rb));
 
             var denom = masses + term3 + term4;
 
-
-
-            var j = numerator / denom;
+            var j = (-(1 + e) * rel / denom);
 
             return ((float)j, rel);
         }
-        //Get the shortest distance between a point and a plane. The output is signed so it holds information
-        //as to which side of the plane normal the point is.
-        public static float SignedDistancePlanePoint(Vector3 planeNormal, Vector3 planePoint, Vector3 point)
-        {
-            return Vector3.Dot(planeNormal, (point - planePoint));
-        } //not my function
         const float RESTING_TOLERANCE = 100f;
         const float TRUNCATE_DIGITS = 1000f;
+        const float IMPULSE_SCALE = 10000f;
+        const float PARALLEL_DIST = 5f;
+        const float PARALLEL_PLANE_DOT_TOLERENCE = 0.05f;
         Vector3 TruncateVector(Vector3 vector)
         {
             return new Vector3(
@@ -651,11 +681,15 @@ namespace sixth3D
                 MathF.Truncate(vector.Z * TRUNCATE_DIGITS) / TRUNCATE_DIGITS
                 );
         }
+
+        Vector3 VelAtPoint(Object3d e, Vector3 point)
+        {
+            return e.velocity + Vector3.Cross(e.angularVelocity, (point - e.position));
+        }
         void FullCollide()
         {
-
-            var watch = System.Diagnostics.Stopwatch.StartNew();
             tb.Text = "";
+            var watch = System.Diagnostics.Stopwatch.StartNew();
 
             var scaledTime = ConstantTimer.Interval.TotalSeconds;
 
@@ -697,19 +731,20 @@ namespace sixth3D
                             var normal = -Vector3.UnitY;
 
                             var ar = v - o.position;
-                            //o.velocity += unscaledGravityVector;
+
+
+                            o.velocity += gravityVector; //force of gravity
                             (float j, float rel) = Impulse(c, v);
-                            //o.velocity -= unscaledGravityVector;
-                            var jn = j * normal;
-                            //tb.Text += "\n" + j.ToString();
-                            //tb.Text += "\n" + o.angularVelocity.ToString();
-                            //o.velocity = o.velocity + (jn / 1f);
+                            o.velocity -= gravityVector;
+
                             var dist = v - new Vector3(v.X, floorYValue, v.Z);
 
-                            o.angularVelocity = o.angularVelocity - Vector3.Cross(ar, jn*scaledGravity);
+                            var jn = ((j * normal) /** IMPULSE_SCALE*/);
+
+
+
+                            o.angularVelocity -= Vector3.Cross(ar, jn);
                             o.velocity += (normal * rel * (1 + o.bouncyness)) - dist;
-                            //tb.Text += "\n" + o.velocity.ToString();
-                            //o.position += new Vector3(0, -(v.Y - floorYValue) / 2, 0);
                         }
                     }
                     //moveing position based on velocity below
@@ -717,13 +752,6 @@ namespace sixth3D
             }
 
             //collisions below
-
-            for (int i = 0; i < WorldObjects.Length; i++)
-            {
-                var current = WorldObjects[i].colliders;
-                if (current != null) foreach (Collider collider in current) collider.hit = false;
-            }
-
             for (int a = 0; a < WorldObjects.Length; a++)
             {
                 var ob1 = WorldObjects[a];
@@ -761,6 +789,60 @@ namespace sixth3D
 
                                     if (Vector3.Distance(collider.position, mainCol.position) < collider.initalDistance + mainCol.initalDistance)//if the two colliders are close
                                     {
+
+                                        //for (int f = 0; f < defaultColliderFaces.Length; f += 4)
+                                        //{
+                                        //    var c0 = collider.points[defaultColliderFaces[f]];
+                                        //    var c2 = collider.points[defaultColliderFaces[f + 2]];
+                                        //    var normal = Vector3.Normalize(Vector3.Cross(collider.points[defaultColliderFaces[f + 1]] - c0, c2 - c0));
+                                        //    var pos = Vector3.Lerp(c0, c2, 0.5f);
+
+
+                                        //    for (int i = 0; i < defaultColliderFaces.Length; i += 4)
+                                        //    {
+                                        //        var p0 = mainCol.points[defaultColliderFaces[i]];
+                                        //        var p2 = mainCol.points[defaultColliderFaces[i + 2]];
+
+                                        //        var normal1 = Vector3.Normalize(Vector3.Cross(
+
+                                        //            mainCol.points[defaultColliderFaces[i + 1]] - p0
+
+                                        //            , p2 - p0));
+                                        //        var pos1 = Vector3.Lerp(p0, p2, 0.5f);
+                                        //        var dot = Vector3.Dot(normal, normal1);
+
+
+                                        //        var distance = Vector3.Dot(pos - pos1, normal);
+
+                                        //        if (-dot > 1f - PARALLEL_PLANE_DOT_TOLERENCE && -dot < 1f + PARALLEL_PLANE_DOT_TOLERENCE)
+                                        //        {
+                                        //            //tb.Text += "\n planes" + dot;
+                                        //            tb.Text += "\n planes" + distance;
+                                        //            if (MathF.Abs(distance) <= PARALLEL_DIST)
+                                        //            {
+                                        //                var t = new Touch(mainCol, collider, normal1, distance);
+
+                                        //                if (currentTouch == -1) //adds the touch class (or) changes the current one
+                                        //                    mainCol.touchingColliders.Add(t);
+                                        //                else
+                                        //                    mainCol.touchingColliders[currentTouch] = t;
+
+                                        //                if (currentTouchB == -1)
+                                        //                    collider.touchingColliders.Add(t);
+                                        //                else
+                                        //                    collider.touchingColliders[currentTouchB] = t;
+
+                                        //                tb.Text += "\n planes TOUCHING";
+                                        //                goto FullBreak;
+                                        //            }
+                                        //        }
+                                        //    }
+
+
+
+
+
+
                                         for (int i = 0; i < collidingLines.Length; i += 2)
                                         {
                                             var line0 = mainCol.points[collidingLines[i]];
@@ -792,6 +874,8 @@ namespace sixth3D
                                                 }
 
 
+                                                //Vector3[] collidePoints = { };
+
                                                 if (point != Vector3.Zero)
                                                 {
                                                     var u = Vector3.Normalize(plane[1] - plane[0]);
@@ -810,7 +894,6 @@ namespace sixth3D
                                                         //tb.Text += "\n" + x + " " + y;
 
                                                         var t = new Touch(mainCol, collider, point, normal, point2);
-                                                        var t2 = new Touch(collider, mainCol, point, normal, point2);
 
                                                         if (currentTouch == -1) //adds the touch class (or) changes the current one
                                                             mainCol.touchingColliders.Add(t);
@@ -849,58 +932,53 @@ namespace sixth3D
                         }
                         foreach (Touch touch in mainCol.touchingColliders)
                         {
-                                var point = touch.point;
+                            var point = touch.point;
+                            var ob2 = touch.bodyB.possibleParent;
 
-                                var ob2 = touch.bodyB.possibleParent;
+                            touch.normal = Vector3.Normalize(touch.normal);
 
-                                touch.normal = Vector3.Normalize(touch.normal);
+                            var normal = touch.normal;
+                            (float j, float rel) = ImpulseB(touch);
+                            var jn = j * normal;
 
-                                var normal = touch.normal;
-                                (float j, float rel) = ImpulseB(touch);
-                                var jn = j * normal;
+                            var both = ob1.weight + ob2.weight;
+                            var weightRatio = ob2.weight / both;
+                            var weightRatioB = ob1.weight / both;
 
-                                var weightRatio = ob2.weight / ob1.weight;
-                                var weightRatioB = ob1.weight / ob2.weight;
-
-                                var dist = Vector3.Dot(normal, touch.secondPoint - touch.point);
-
-                                var ra = point - ob1.position;
-                                var rb = point - ob2.position;
-
-                                ob1.velocity += jn;
-                                ob1.angularVelocity += Vector3.Cross(ra, jn);
-                                tb.Text += "\n " + jn.ToString();
-
-                                //(normal * rel * (1 + o.bouncyness)) - dist;
-
-                                var pointDepth = (touch.point - touch.secondPoint).Length();
-
-                                var reaction = Vector3.Dot(-normal, ob1.velocity) * normal;
-
-                                var fullReaction = ((pointDepth * normal) - (normal * dist) + reaction);
-
-                                var angularReaction = Vector3.Cross(ra, jn);
+                            float dist = Vector3.Dot(normal, touch.secondPoint - touch.point);
 
 
-                                if (ob1.velocity.Length() < RESTING_TOLERANCE)
-                                {
-                                    tb.Text += "\n resting";
-                                    ob1.velocity = Vector3.Zero;
-                                }
-                                if (dist < 0)
-                                {
-                                    tb.Text += "\n p";
-                                    ob1.velocity += fullReaction * (1 + ob1.bouncyness) * weightRatio;
-                                    ob1.angularVelocity += angularReaction * weightRatio;
-                                    ob2.velocity -= fullReaction * (1 + ob2.bouncyness) * weightRatioB;
-                                    ob2.angularVelocity -= Vector3.Cross(rb,jn) * weightRatioB;
-                                }
+                            var ra = point - ob1.position;
+                            var rb = point - ob2.position;
+
+
+                            var dn = -dist * -normal;
+                            ob1.velocity += ((jn * IMPULSE_SCALE) * weightRatio) + normal;
+                            ob1.angularVelocity += Vector3.Cross(ra, jn) / ob1.weight;
+                            ob2.velocity -= ((jn * IMPULSE_SCALE) * weightRatioB) + normal;
+                            ob2.angularVelocity -= Vector3.Cross(rb, jn) / ob2.weight;
+
+                            Vector3 vectorLine = Vector3.Normalize(Vector3.Cross(Vector3.Cross(normal, Vector3.UnitY), normal));
+
+                            var staticFriction = touch.bodyA.staticFriction;
+                            var keneticFriction = touch.bodyA.keneticFriction;
+
+                            var dirrectionalVelocity = Vector3.Dot(ob1.velocity, vectorLine);
+
+                            ob1.velocity -= dirrectionalVelocity * vectorLine * keneticFriction;
+
+
                         }
                     }
             }
 
             foreach (Object3d o in WorldObjects)
             {
+                o.position = TruncateVector(o.position);
+                o.rotation = TruncateVector(o.rotation);
+                o.velocity = TruncateVector(o.velocity);
+                o.angularVelocity = TruncateVector(o.angularVelocity);
+
                 o.position += o.velocity * (float)scaledTime;
                 o.velocity *= (1f - (float)scaledTime) * o.velocityDecay;
 
@@ -908,11 +986,6 @@ namespace sixth3D
                 if (o.rotation.Length() > (Vector3.One * (float)Math.PI * 2f).Length())
                     o.rotation -= (Vector3.One * (float)Math.PI * 2f);
                 o.angularVelocity *= (1f - (float)scaledTime) * o.angularVelocityDecay;
-
-                o.position = TruncateVector(o.position);
-                o.rotation = TruncateVector(o.rotation);
-                o.velocity = TruncateVector(o.velocity);
-                o.angularVelocity = TruncateVector(o.angularVelocity);
 
                 o.oldVelocity = o.velocity;
             }
@@ -938,6 +1011,44 @@ namespace sixth3D
 
         }
         bool renderColliders = true;
+        Polyline GetDebugCanvasChild(int i)
+        {
+            if (debugCanvas.Children.Count > i)
+            {
+                var l = debugCanvas.Children[i] as Polyline;
+                return l;
+            }
+            else
+            {
+                var a = new Polyline()
+                {
+                    StrokeThickness = 1.5,
+                    Stroke = Brushes.DeepPink,
+                    Visibility = Visibility.Visible,
+                    Points = new PointCollection(4)
+                };
+                debugCanvas.Children.Add(a);
+                return a;
+            }
+        }
+        void FullDrawDebugLine(Vector3[] points, Brush color, int index)
+        {
+            var a = GetDebugCanvasChild(index);
+            Point[] b = new Point[points.Length];
+            int d = 0;
+            float e = 0f;
+            foreach (Vector3 c in points)
+            {
+                var f = camPoint(c);
+                b[d] = screen(f);
+                e += f.Z;
+                d++;
+            }
+            e /= points.Length;
+            if (e < 0f) a.Visibility = Visibility.Hidden; else a.Visibility = Visibility.Visible;
+            a.Points = new PointCollection(b);
+            a.Stroke = color;
+        }
         Polygon NewPolygon() // just a simple way to make a instance of a polygon without making a ton of lines of code
         {
             Polygon p = new Polygon();
@@ -988,128 +1099,103 @@ namespace sixth3D
         void RenderColliders()
         {
             int index = 3;
-            for (int ob = 0; ob < WorldObjects.Length; ob++)
-            {
-                var e = WorldObjects[ob];
-                if (e.colliders != null)
+            if (debugCanvas.Children.Count >= 3)
+                for (int ob = 0; ob < WorldObjects.Length; ob++)
                 {
-                    for (int i = 0; i < e.colliders.Length; i++)
+                    var e = WorldObjects[ob];
+                    if (e.colliders != null)
                     {
-                        var collider = e.colliders[i];
-                        if (collider.points == null) collider.GeneratePoints();
-                        //var center = RenderPoint(Vector3.Transform(Vector3.Transform(Vector3.Transform(collider.position, firstPosition), firstRotate), secondRotate));
-                        var tr = new Vector3[8];
-                        float avg = 0;
-                        var ps = new Point[8];
-                        for (int a = 0; a < 8; a++)
+                        for (int i = 0; i < e.colliders.Length; i++)
                         {
-                            tr[a] = Vector3.Transform(Vector3.Transform(Vector3.Transform(collider.points[a], firstRotate), secondRotate), firstPosition);
-                            avg += tr[a].Z / 8f;
-                        }
-                        for (int a = 0; a < 8; a++)
-                        {
-                            ps[a] = RenderPoint(tr[a]);
-                        }
-                        if (debugCanvas.Children.Count > index)
-                        {
-                            var l = debugCanvas.Children[index] as Polyline;
+                            var collider = e.colliders[i];
+                            if (collider.points == null) collider.GeneratePoints();
+                            var tr = new Vector3[8];
+                            float avg = 0;
+                            var ps = new Point[8];
+                            for (int a = 0; a < 8; a++)
+                            {
+                                tr[a] = camPoint(collider.points[a]);
+                                avg += tr[a].Z / 8f;
+                            }
+                            for (int a = 0; a < 8; a++)
+                            {
+                                ps[a] = screen(tr[a]);
+                            }
+                            var l = GetDebugCanvasChild(index);
                             l.Points = new PointCollection(ps);
-                            if (avg < 0)
-                                l.Stroke = Brushes.Transparent;
-                            else
+                            if (renderColliders == true)
                             {
-                                if (collider.touchingColliders.Count > 0)
-                                {
-                                    l.Stroke = Brushes.Red;
-                                }
+                                if (avg < 0)
+                                    l.Stroke = Brushes.Transparent;
                                 else
                                 {
-                                    l.Stroke = Brushes.Green;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            System.Windows.Shapes.Polyline line = new Polyline();
-                            line.Points = new PointCollection(ps);
-                            line.Stroke = Brushes.Green;
-                            line.StrokeThickness = 1.5;
-                            if (collider.touchingColliders.Count > 0)
-                            {
-                                line.Stroke = Brushes.Red;
-                            }
-                            debugCanvas.Children.Add(line);
-                        }
-                        index++;
-
-                        if (collider.touchingColliders.Count > 0)
-                        {
-                            foreach (Touch touching in collider.touchingColliders)
-                            {
-                                var r = RenderPoint(Vector3.Transform(Vector3.Transform(Vector3.Transform(touching.point, firstRotate), secondRotate), firstPosition));
-                                var a = RenderPoint(Vector3.Transform(Vector3.Transform(Vector3.Transform(touching.point + touching.normal * 100f, firstRotate),secondRotate), firstPosition));
-
-
-                                if (debugCanvas.Children.Count > index)
-                                {
-                                    var l = debugCanvas.Children[index] as Polyline;
-                                    l.Points = new PointCollection() { r, a };
-                                    if (avg < 0)
-                                        l.Stroke = Brushes.Transparent;
-                                    else
+                                    if (collider.touchingColliders.Count > 0)
                                     {
-                                        l.Stroke = Brushes.Blue;
-                                    }
-                                }
-                                else
-                                {
-                                    System.Windows.Shapes.Polyline line = new Polyline();
-                                    line.Points = new PointCollection() { r, a };
-                                    line.Stroke = Brushes.Green;
-                                    line.StrokeThickness = 1.5;
-                                    debugCanvas.Children.Add(line);
-                                }
-                                if (touching.index != null)
-                                {
-                                    index++;
-                                    var r2 = RenderPoint(Vector3.Transform(Vector3.Transform(Vector3.Transform(touching.bodyB.points[collidingLines[touching.index]], firstRotate), secondRotate), firstPosition));
-                                    var a2 = RenderPoint(Vector3.Transform(Vector3.Transform(Vector3.Transform(touching.bodyB.points[collidingLines[touching.index + 1]], firstRotate), secondRotate), firstPosition));
-                                    if (debugCanvas.Children.Count > index)
-                                    {
-                                        var l = debugCanvas.Children[index] as Polyline;
-                                        l.Points = new PointCollection() { r2, a2 };
-                                        if (avg < 0)
-                                            l.Stroke = Brushes.Transparent;
-                                        else
-                                        {
-                                            l.Stroke = Brushes.LightGoldenrodYellow;
-                                        }
+                                        l.Stroke = Brushes.Red;
                                     }
                                     else
                                     {
-                                        System.Windows.Shapes.Polyline line = new Polyline();
-                                        line.Points = new PointCollection() { r2, a2 };
-                                        line.Stroke = Brushes.Green;
-                                        line.StrokeThickness = 1.5f;
-                                        debugCanvas.Children.Add(line);
+                                        l.Stroke = Brushes.Green;
                                     }
                                 }
                             }
                             index++;
+                            if (renderColliders == true)
+                            {
+                                if (debugCanvas.Children.Count > index)
+                                    debugCanvas.Children[index].Visibility = Visibility.Hidden;
+                            }
+                            else
+                            {
+                                var l3 = new Vector3[] { e.position, e.velocity + e.position };
+                                FullDrawDebugLine(l3, Brushes.Red, index);
+                            }
+                            index++;
+
+                            //var l4 = GetDebugCanvasChild(index);
+
+                            //l4.Points = new PointCollection(new Point[] { screen(camPoint(e.position)), screen(camPoint(e.angularVelocity*100f + e.position)) });
+                            //l4.Stroke = Brushes.Blue;
+                            //index++;
+
+                            if (collider.touchingColliders.Count > 0)
+                            {
+                                var aa = collider.touchingColliders[0];
+
+
+                                if (renderColliders == true)
+                                {
+                                    if (debugCanvas.Children.Count > index)
+                                        debugCanvas.Children[index].Visibility = Visibility.Hidden;
+                                }
+                                else
+                                {
+                                    var l1 = new Vector3[] { aa.point, aa.secondPoint };
+                                    FullDrawDebugLine(l1, Brushes.Cyan, index);
+                                }
+                                index++;
+
+                                if (renderColliders == true)
+                                {
+                                    if (debugCanvas.Children.Count > index)
+                                        debugCanvas.Children[index].Visibility = Visibility.Hidden;
+                                }
+                                else
+                                {
+                                    var l2 = new Vector3[] { aa.point, aa.normal * 100f + aa.point };
+                                    FullDrawDebugLine(l2, Brushes.Yellow, index);
+                                }
+                                index++;
+                            }
+
                         }
-
-
                     }
                 }
-            }
-            if (index < debugCanvas.Children.Count)
-            {
-                for (int i = index; i < debugCanvas.Children.Count; i++)
-                {
-                    var l = debugCanvas.Children[index] as Polyline;
-                    l.Visibility = Visibility.Hidden;
-                }
-            }
+            //for (int i = index; i < debugCanvas.Children.Count; i++)
+            //{
+            //    var l = debugCanvas.Children[i] as Polyline;
+            //    l.Visibility = Visibility.Hidden;
+            //}
         }
         private void CursorPos(int x, int y)
         {
@@ -1120,20 +1206,21 @@ namespace sixth3D
         private static extern bool SetCursorPos(int x, int y);
 
         float sens = 0.005f;
-        private void OnPreviewMouseMove(object sender, MouseEventArgs e)
-        {
-            if (!Keyboard.IsKeyDown(inputs[11])) { 
-                var wind = Application.Current.MainWindow;
-                var middle = new Vector2((float)wind.Width/2f,(float)wind.Height/2f);
-                var pos = Mouse.GetPosition(mainCanvas);
 
-                camRot += new Vector3((float)-( middle.Y -pos.Y),(float)( middle.X-pos.X),0) * sens;
-                var realPos = wind.PointToScreen(new Point(middle.X,middle.Y));
-                SetCursorPos((int)(realPos.X), (int)(realPos.Y));
-                //Mouse
-                //SetCursorPos((int)(realPos.X), (int)(realPos.Y));
-            }
-        }
+        //private void OnPreviewMouseMove(object sender, MouseEventArgs e)
+        //{
+        //    if (!Keyboard.IsKeyDown(inputs[11])) { 
+        //        var wind = Application.Current.MainWindow;
+        //        var middle = new Vector2((float)wind.Width/2f,(float)wind.Height/2f);
+        //        var pos = Mouse.GetPosition(mainCanvas);
+
+        //        camRot += new Vector3((float)-( middle.Y -pos.Y),(float)( middle.X-pos.X),0) * sens;
+        //        var realPos = wind.PointToScreen(new Point(middle.X,middle.Y));
+        //        //SetCursorPos((int)(realPos.X), (int)(realPos.Y));
+        //        //Mouse
+        //        //SetCursorPos((int)(realPos.X), (int)(realPos.Y));
+        //    }
+        //}
 
         //System.Windows.Media.Effects.Effect
         void FullRender(DrawingContext drawingContext = null)
@@ -1165,7 +1252,7 @@ namespace sixth3D
 
             for (int i = 0; i < faceList.Count; i++)
             {
-            
+
                 var f = faceList[i];
 
                 if (f.z > 0)
@@ -1179,7 +1266,7 @@ namespace sixth3D
 
                     if (i > mainCanvas.Children.Count - 1)
                     {
-                        
+
                         Polygon p = new Polygon();
                         p.Stroke = Brushes.Black;
                         p.Fill = Brushes.LightBlue;
@@ -1200,12 +1287,13 @@ namespace sixth3D
                             f.fullUpdate = false;
                             p.Fill = f.color;
                             //ttttp.Stroke = Brushes.Black;
-                            if (f.effects != null) {
+                            if (f.effects != null)
+                            {
                                 p.Effect = f.effects;
                             }
                         }
 
-                        
+
 
 
                     }
@@ -1222,10 +1310,7 @@ namespace sixth3D
                 }
             }
 
-            if (renderColliders == true)
-            {
-                RenderColliders();
-            }
+            RenderColliders();
 
             watch.Stop();
             if (debugCanvas.Children.Count > 0)
@@ -1243,7 +1328,7 @@ namespace sixth3D
                 debugCanvas.Children.Add(NewPolygon());
             }
             RenderTimer.Interval = new TimeSpan(0, 0, 0, 0, (int)watch.ElapsedMilliseconds + 1);
-            tb.Text += "\n" + watch.ElapsedMilliseconds;
+            // tb.Text += "\n" + watch.ElapsedMilliseconds;
             this.Dispatcher.BeginInvoke(
                 DispatcherPriority.Loaded,
                  new Action(() =>
@@ -1263,7 +1348,7 @@ namespace sixth3D
         public float z { get; set; }
         public Brush color { get; set; }
         public Effect effects { get; set; }
-        public bool fullUpdate { get;set; }
+        public bool fullUpdate { get; set; }
         public Face TransformAll(Matrix4x4 m)
         {
             Vector3[] transformed = points;
@@ -1294,7 +1379,6 @@ namespace sixth3D
     {
         public static int count = 0;
         public int ID { get; set; }
-        public bool hit { get; set; }
         public Vector3 position { get; set; }
         public Vector3 scale { get; set; }
         public Vector3 size { get; set; }
@@ -1307,11 +1391,8 @@ namespace sixth3D
         public Object3d possibleParent { get; set; }
         public List<Touch> touchingColliders { get; set; }
         public Vector3[] basePoints { get; set; }
-        public bool resting { get; set; }
-
-
-
-
+        public float staticFriction { get; set; } = 0.5f;
+        public float keneticFriction { get; set; } = 0.3f;
         public Vector3[] TransformAll(Matrix4x4 m)
         {
             Vector3[] transformed = points;
@@ -1356,9 +1437,7 @@ namespace sixth3D
             this.scale = scale;
             this.size = size;
             initalDistance = Vector3.Distance(position, new Vector3(size.X, size.Y, size.Z) * scale);
-            hit = false;
             touchingColliders = new List<Touch>();
-            resting = false;
 
 
         }
@@ -1369,10 +1448,7 @@ namespace sixth3D
         public Collider bodyA { get; set; }
         public Collider bodyB { get; set; }
         public Vector3 point { get; set; }
-        public Vector3[] pointPlane { get; set; }
         public Vector3 normal { get; set; }
-        public int index { get; set; }
-        public int faceIndex { get; set; }
         public Vector3 secondPoint { get; set; }
         public Touch(Collider a, Collider b, Vector3 c, Vector3 d)
         {
@@ -1388,22 +1464,6 @@ namespace sixth3D
             point = pointOfContact;
             normal = normalVector;
             secondPoint = point2;
-        }
-        public Touch(Collider a, Collider b, Vector3 pointOfContact, Vector3 normalVector, int lineIndex, int indexOfFace)
-        {
-            bodyA = a;
-            bodyB = b;
-            point = pointOfContact;
-            normal = normalVector;
-            index = lineIndex;
-            faceIndex = indexOfFace;
-        }
-        public Touch(Collider a, Collider b, Vector3 c, Vector3[] d)
-        {
-            bodyA = a;
-            bodyB = b;
-            point = c;
-            pointPlane = d;
         }
         public Touch(Collider a, Collider b)
         {
@@ -1438,14 +1498,14 @@ namespace sixth3D
         public static int count = 0;
         public int ID { get; set; }
         public Vector3[] basePoints { get; set; } //a list of points that should not be edited they are used for transformations and such
-        public Vector3 rotation { get; set; } //effects where the points are placed in world space
-        public Vector3 position { get; set; } // center and position are pretty much the same thing
+        public Vector3 rotation { get; set; } = Vector3.Zero; //effects where the points are placed in world space
+        public Vector3 position { get; set; } = Vector3.Zero; // center and position are pretty much the same thing
         public Vector3[] worldPoints { get; set; } // where the points exist in the world
         public Vector3 center { get; set; } // center of the model follows the same rules as base points
         public Vector3 scale { get; set; } // scale of the points in the world, also effects weight
         public List<Face> squareFaces { get; set; } // list of generated faces from the var below
         public int[] orginalFaceData { get; set; }
-        public Vector3 oldVelocity { get; set; }
+        public Vector3 oldVelocity { get; set; } = Vector3.Zero;
         public Vector3 velocity { get; set; }
         public Vector3 angularVelocity { get; set; }
         public float velocityDecay { get; set; }
@@ -1454,7 +1514,6 @@ namespace sixth3D
         public float drag { get; set; }
         public float gravityScale { get; set; }
         public float bouncyness { get; set; }
-        public bool allowRotaion { get; set; }
         public Collider[] colliders { get; set; }
         public void FixColliders()
         {
@@ -1469,6 +1528,11 @@ namespace sixth3D
                     col.GeneratePoints();
                 }
         }
+        //public void ForceAtPosition(Vector3 pos, Vector3 force)
+        //{
+        //    velocity += force;
+        //    angularVelocity += Vector3.Cross(pos - ( pos+force),);
+        //}
         public void Rotate()
         {
             Matrix4x4 m = Matrix4x4.CreateFromYawPitchRoll(rotation.Y, rotation.X, rotation.Z);
@@ -1502,7 +1566,6 @@ namespace sixth3D
             velocityDecay = 0.99f;
             angularVelocityDecay = 0.99f;
             bouncyness = 0.2f;
-            allowRotaion = true;
             oldVelocity = Vector3.Zero;
         }
 

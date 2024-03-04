@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="Accord.Math" Version="3.8.0" />
+    <PackageReference Include="Magick.NET-Q16-AnyCPU" Version="13.6.0" />
   </ItemGroup>
 
   <ItemGroup>

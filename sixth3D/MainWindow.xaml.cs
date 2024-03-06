@@ -504,7 +504,7 @@ namespace sixth3D
                             var normal = Vector3.Normalize(Vector3.Cross(plane[1] - plane[0], plane[2] - plane[0]));
 
                             //find where a inf line and a inf hyperplane touch
-                            var point = LinePlane(center, normal, linePoint, lineDir);
+                            var point = LinePlane(center, normal, linePoint, lineDir, 10000f);
 
 
                             if (point != Vector3.Zero)
@@ -604,39 +604,17 @@ namespace sixth3D
             5,4,7,6,
             7,6,2,3
         };
-        public static Vector3 LinePlane3(Vector3 planePoint, Vector3 planeNormal, Vector3 linePoint, Vector3 lineDirection)
-        {
-            if (Vector3.Dot(planeNormal, Vector3.Normalize(lineDirection)) == 0)
-            {
-                return Vector3.Zero;
-            }
 
-            double t = (Vector3.Dot(planeNormal, (planePoint)) - Vector3.Dot(planeNormal, (linePoint))) / Vector3.Dot(planeNormal, (Vector3.Normalize(lineDirection)));
-            return linePoint + Vector3.Normalize(lineDirection) * (float)t;
-        }
-
-        Vector3 LinePlane2(Vector3 planeCenter, Vector3 planeNormal, Vector3 l0, Vector3 l1)
-        {
-            var u = l1 - l0;
-            var dot = Vector3.Dot(planeNormal, u);
-            //if (Math.Abs(dot) > PARALLEL_PLANE_DOT_TOLERENCE)
-            {
-                var w = l0 - planeCenter;
-                var fac = -Vector3.Dot(planeNormal, w) / dot;
-                u = u * fac;
-
-                return l0 + u;
-            }
-            return Vector3.Zero;
-        }
-        Vector3 LinePlane(Vector3 planePoint, Vector3 planeNormal, Vector3 linePos, Vector3 lineDir)
+        Vector3 LinePlane(Vector3 planePoint, Vector3 planeNormal, Vector3 linePos, Vector3 lineDir, float distance)
         {
             lineDir = Vector3.Normalize(lineDir);
 
             if (Vector3.Dot(planeNormal, lineDir) == 0) return Vector3.Zero;
 
             var t = (Vector3.Dot(planeNormal, planePoint) - Vector3.Dot(planeNormal, linePos)) / Vector3.Dot(planeNormal, lineDir);
-            var final = linePos - (lineDir * t);
+            var final = linePos + (lineDir * t);
+            // if (Vector3.Distance(linePos + (lineDir * distance / 2), final) < distance / 2)
+            if (t > distance+10f || (t < -10f)) return Vector3.Zero;
 
             return final;
         } //not my funciton (edited and modifyed by me)
@@ -726,55 +704,99 @@ namespace sixth3D
                 MathF.Truncate(vector.Z * TRUNCATE_DIGITS) / TRUNCATE_DIGITS
                 );
         }
-
-        Vector3 VelAtPoint(Object3d e, Vector3 point)
+        (Vector3 normal, Vector3 point) EvaluatePlane(Collider collider, int f)
         {
-            return e.velocity + Vector3.Cross(e.angularVelocity, (point - e.position));
-        }
-        static bool Separated(Vector3[] vertsA, Vector3[] vertsB, Vector3 axis)
-        {
-            // Handles the cross product = {0,0,0} case
-            if (axis == Vector3.Zero)
-                return false;
-
-            var aMin = float.MaxValue;
-            var aMax = float.MinValue;
-            var bMin = float.MaxValue;
-            var bMax = float.MinValue;
-
-            // Define two intervals, a and b. Calculate their min and max values
-            for (var i = 0; i < 8; i++)
+            Vector3[] plane =
             {
-                var aDist = Vector3.Dot(vertsA[i], axis);
-                aMin = aDist < aMin ? aDist : aMin;
-                aMax = aDist > aMax ? aDist : aMax;
-                var bDist = Vector3.Dot(vertsB[i], axis);
-                bMin = bDist < bMin ? bDist : bMin;
-                bMax = bDist > bMax ? bDist : bMax;
+                                                    collider.points[defaultColliderFaces[f]],
+                                                    collider.points[defaultColliderFaces[f+1]],
+                                                    collider.points[defaultColliderFaces[f+2]],
+                                                    collider.points[defaultColliderFaces[f+3]],
+                                                };
+            var center = (plane[0] + plane[1] + plane[2] + plane[3]) / 4;
+            var normal = Vector3.Normalize(Vector3.Cross(plane[1] - plane[0], plane[2] - plane[0]));
+            return (normal, center);
+        }
+        bool RevisedLinePlaneCollision(Object3d ob1, Object3d ob2, Collider mainCol, Collider collider, int currentTouch, int currentTouchB)
+        {
+
+            Vector3 closeNormal = Vector3.Zero, closeCenter = Vector3.Zero, closePoint = Vector3.Zero;
+            Vector3 fullNormal = Vector3.Zero, fullCenter = Vector3.Zero, fullPoint = Vector3.Zero;
+
+            float closeDot = -100f;
+            float fullDot = -100f;
+
+            float dotTolerence = 5f;
+
+            var points = mainCol.points;
+
+            bool touching = false;
+            for (int p = 0; p < points.Length; p++)
+            {
+                bool inside = true;
+                for (int f = 0; f < defaultColliderFaces.Length; f += 4)
+                {
+                    (var normal, var center) = EvaluatePlane(collider, f);
+                    var dot = Vector3.Dot(normal, points[p] - center);
+
+
+                    if (dot > dotTolerence)
+                    {
+                        inside = false;
+                        break;
+                    }
+                    else
+                    {
+                        if (dot > closeDot)
+                        {
+                            closeDot = dot;
+                            closeCenter = center;
+                            closeNormal = normal;
+                            closePoint = points[p];
+                        }
+                    }
+                }
+                if (fullPoint != Vector3.Zero)
+                {
+                    if (inside && Vector3.Distance(closePoint, collider.position) < Vector3.Distance(fullPoint, collider.position))
+                        goto True;
+                }
+                else if (inside) goto True;
+                True:
+                {
+                    touching = true;
+                    fullDot = closeDot;
+                    fullCenter = closeCenter;
+                    fullNormal = closeNormal;
+                    fullPoint = closePoint;
+                }
+            }
+            if (touching)
+            {
+                var t = new Touch(mainCol, collider, (-fullDot * fullNormal) + fullPoint, fullNormal, fullPoint);
+                ReplaceTouch(mainCol, t, currentTouch);
             }
 
-            // One-dimensional intersection test between a and b
-            var longSpan = MathF.Max(aMax, bMax) - MathF.Min(aMin, bMin);
-            var sumSpan = aMax - aMin + bMax - bMin;
-            return longSpan >= sumSpan; // > to treat touching as intersection
-        }
 
+
+            return touching;
+        }
         bool LinePlaneCollision(Object3d ob1, Object3d ob2, Collider mainCol, Collider collider, int currentTouch, int currentTouchB)
         {
+            List<Touch> touches = new List<Touch>();
             for (int i = 0; i < collidingLines.Length; i += 2)
             {
                 var line0 = mainCol.points[collidingLines[i]];
                 var line1 = mainCol.points[collidingLines[i + 1]];
 
-                var di = Vector3.Normalize(line0 - ob1.position) * 0.01f;
-                var di1 = Vector3.Normalize(line1 - ob1.position) * 0.01f;
+                //var di = Vector3.Normalize(line0 - ob1.position) * 0.01f;
+                //var di1 = Vector3.Normalize(line1 - ob1.position) * 0.01f;
 
-                line0 -= di;
-                line1 -= di1;
+                //line0 -= di;
+                //line1 -= di1;
 
 
-                var lineDirrectionUnit = Vector3.Normalize(line1 - line0);
-                var lineLength = Vector3.Distance(line0, line1);
+
                 for (int f = 0; f < defaultColliderFaces.Length; f += 4)
                 {
                     Vector3[] plane =
@@ -794,35 +816,19 @@ namespace sixth3D
 
                     var point2 = line0;
 
-                    if (Vector3.Distance(collider.position, line1) < Vector3.Distance(collider.position, line0))
+                    if (Vector3.Distance(collider.position, line1) > Vector3.Distance(collider.position, line0))
                     {
                         point2 = line1;
                     }
 
+                    var lineLength = Vector3.Distance(line0, line1);
 
-                    var point = LinePlane3(center, normal, line0, line1 - line0);
-
-                    if (Vector3.Distance(point, point2) - 10f > lineLength / 2)
-                    {
-                        point = LinePlane3(center, normal, line1, line0 - line1);
-                    }
-                    if (Vector3.Distance(point, point2) - 10f > lineLength / 2) break;
-                    //{
-                    //    var point1 = LinePlane2(center, normal, line1, line0);
-                    //    if (Vector3.Distance(point1, Vector3.Lerp(line1, line0, 0.5f))-100f > lineLength / 2)
-                    //    {
-                    //        break;
-                    //    }
-                    //    else point = point1;
-                    //}
+                    var point = LinePlane(center, normal, line0, line1 - line0, lineLength);
 
 
+                    
 
-
-
-                    //Vector3[] collidePoints = { };
-
-                    if (point != Vector3.Zero)
+                    if (Vector3.Distance(Vector3.Lerp(line0, line1, 0.5f), point) < lineLength/2f)
                     {
                         var u = Vector3.Normalize(plane[1] - plane[0]);
                         var v = Vector3.Normalize(Vector3.Cross(u, normal));
@@ -830,20 +836,17 @@ namespace sixth3D
                         var x = Vector3.Dot(center - point, u); //projects the 3d point of hit to the 2d hyperplane cords
                         var y = Vector3.Dot(center - point, v);
 
-                        //if (
-                        //    Math.Abs(x) < mainCol.size.X
-                        //    &&
-                        //    Math.Abs(y) < mainCol.size.X
-                        //    )
+                        if (
+                           MathF.Abs(x) < 50f
+                            &&
+                            MathF.Abs(y) < 50f
+                            )
                         {
                             //tb.Text += "\n" + x + " " + y;
 
                             var t = new Touch(mainCol, collider, point, normal, point2);
 
-                            if (currentTouch == -1) //adds the touch class (or) changes the current one
-                                mainCol.touchingColliders.Add(t);
-                            else
-                                mainCol.touchingColliders[currentTouch] = t;
+                            touches.Add(t);
 
                             //if (currentTouchB == -1)
                             //    collider.touchingColliders.Add(t);
@@ -851,20 +854,34 @@ namespace sixth3D
                             //    collider.touchingColliders[currentTouchB] = t;
 
 
-                            return true;
+                           ///return true;
                         }
                     }
 
                 }
             }
+            if (touches.Count > 0)
+            {
+                Touch closest = touches[0];
+                float distance = Vector3.Distance(closest.point, mainCol.position);
+                for (int i = 0; i < touches.Count; i++)
+                {
+                    var current = touches[i];
+                    var dist = Vector3.Distance(current.point, mainCol.position);
+
+                    if (dist < distance)
+                    {
+                        distance = dist;
+                        closest = current;
+                    }
+                }
+
+                ReplaceTouch(mainCol, closest, currentTouch);
+                return true;
+            }
+
             return false;
         }
-        /// <summary>
-        /// replaces c1's touch index with touch
-        /// </summary>
-        /// <param name="c1"></param>
-        /// <param name="touch"></param>
-        /// <param name="touchIndex"></param>
         void ReplaceTouch(Collider c1, Touch touch, int touchIndex)
         {
             if (touchIndex == -1) //adds the touch class (or) changes the current one
@@ -873,178 +890,15 @@ namespace sixth3D
                 c1.touchingColliders[touchIndex] = touch;
         }
 
-        /// <summary>
-        /// gets the normal and center of collider's plane based on the index given (corresponds to defaultColliderFaces)
-        /// </summary>
-        /// <param name="collider"></param>
-        /// <param name="f"></param>
-        /// <returns></returns>
-        (Vector3 normal, Vector3 point) EvaluatePlane(Collider collider, int f)
-        {
-            Vector3[] plane =
-            {
-                                                    collider.points[defaultColliderFaces[f]],
-                                                    collider.points[defaultColliderFaces[f+1]],
-                                                    collider.points[defaultColliderFaces[f+2]],
-                                                    collider.points[defaultColliderFaces[f+3]],
-                                                };
-            var center = (plane[0] + plane[1] + plane[2] + plane[3]) / 4;
-            var normal = Vector3.Normalize(Vector3.Cross(plane[1] - plane[0], plane[2] - plane[0]));
-            return (normal, center);
-        }
-        const float tolerence = 0f;
-        /// <summary> 
-        /// returns point on c1's corrner thats inside c2   |  
-        /// Matrix4x4.Invert(Matrix4x4.CreateFromYawPitchRoll(mainRot.Y, mainRot.X, mainRot.Z), out this)
-        /// </summary>
-        /// <param name="c1"></param>
-        /// <param name="c2"></param>
-        /// <param name="inverseRotationOfC2"></param>
-        /// <returns></returns>
-        Vector3 HalfCorrnerCollision(Collider c1, Collider c2, Matrix4x4 inverseRotationOfC2)
-        {
-            var colliderPoints = c1.points;
-            for (int i = 0; i < colliderPoints.Length; i++)
-            {
-                var current = Vector3.Transform(colliderPoints[i], inverseRotationOfC2) - c2.position;
-                if (Math.Abs(current.X) <= c2.size.X * c2.scale.X + tolerence)
-                    if (Math.Abs(current.Y) <= c2.size.Y * c2.scale.Y + tolerence)
-                        if (Math.Abs(current.Z) <= c2.size.Z * c2.scale.Z + tolerence)
-                        {
-                            tb.Text += "\n hit";
-                            return colliderPoints[i];
-                        }
-            }
-            return Vector3.Zero;
-        }
-        /// <summary>
-        /// gets the closest c2's plane (normal and interection) from c1's corrner interection
-        /// </summary>
-        /// <param name="c1"></param>
-        /// <param name="c2"></param>
-        /// <param name=""></param>
-        /// <returns></returns>
-        (Vector3 pointOfInterection, Vector3 normal) EvaluateClosestPlaneToPoint(Collider c1, Collider c2, Vector3 c1ColliderPoint)
-        {
-            Vector3 planePoint = Vector3.Zero;
-            Vector3 planeNormal = Vector3.Zero;
-            for (int f = 0; f < defaultColliderFaces.Length; f += 4)
-            {
-                (var normal, var center) = EvaluatePlane(c2, f);
-                var point = LinePlane(center, normal, c1.position, Vector3.Normalize(c1ColliderPoint - c1.position));
-
-                if (planePoint != Vector3.Zero)
-                {
-                    if (Vector3.Distance(c1.position, planePoint) > Vector3.Distance(c1.position, point))
-                    {
-                        planePoint = point;
-                        planeNormal = normal;
-                    }
-                }
-                else
-                {
-                    planePoint = point;
-                    planeNormal = normal;
-                }
-            }
-            return (planePoint, planeNormal);
-        }
-
-        bool CorrnerPointsCollision(Object3d ob1, Object3d ob2, Collider mainCol, Collider collider, int currentTouch, int currentTouchB)
-        {
-
-            var mainRot = ob1.rotation;
-            var collRot = ob2.rotation;
-
-            //inverse matrixes
-            Matrix4x4 mainIrot;
-            Matrix4x4.Invert(Matrix4x4.CreateFromYawPitchRoll(mainRot.Y, mainRot.X, mainRot.Z), out mainIrot);
-            Matrix4x4 colliderIrot;
-            Matrix4x4.Invert(Matrix4x4.CreateFromYawPitchRoll(collRot.Y, collRot.X, collRot.Z), out colliderIrot);
-
-            // returns point on mainCol's corrner thats inside collider
-            Vector3 mainColliderPoint = HalfCorrnerCollision(mainCol, collider, colliderIrot);
-
-            // returns point on colliders's corrner thats inside mainCol
-            Vector3 collidingColliderPoint = HalfCorrnerCollision(collider, mainCol, mainIrot);
-
-            if (collidingColliderPoint == Vector3.Zero && mainColliderPoint == Vector3.Zero)
-            {
-                return false;
-            }
-
-            var dir = Vector3.Normalize(-ob1.velocity);
-
-            Vector3 closestPoint = Vector3.Zero;
-            float distance = 10000f;
-            Vector3 closestNormal = Vector3.Zero;
-            for (int f = 0; f < defaultColliderFaces.Length; f += 4)
-            {
-                (var normal, var center) = EvaluatePlane(collider, f);
-                var point = LinePlane(center, normal, mainColliderPoint, dir);
-                var dist = Vector3.Distance(point, mainColliderPoint);
-                if (distance != 0f)
-                {
-                    if (dist < distance)
-                    {
-                        closestPoint = point;
-                        distance = dist;
-                        closestNormal = normal;
-                    }
-                }
-                else
-                {
-                    distance = dist;
-                    closestNormal = normal;
-                    closestPoint = point;
-                }
-            }
-            var mainsTouch = new Touch(mainCol, collider, closestPoint, closestNormal, mainColliderPoint);
 
 
-            //    (var mainP1, var mainNormal) = EvaluateClosestPlaneToPoint(mainCol, collider, mainColliderPoint);
-            //if (Vector3.Distance(mainCol.position + mainNormal, collider.position) < Vector3.Distance(mainCol.position - mainNormal, collider.position))
-            //    mainNormal = -mainNormal;
-
-
-
-            (var colP1, var colNormal) = EvaluateClosestPlaneToPoint(collider, mainCol, collidingColliderPoint);
-            if (Vector3.Distance(collider.position + colNormal, mainCol.position) < Vector3.Distance(collider.position - colNormal, mainCol.position))
-                colNormal = -colNormal;
-
-            var colsTouch = new Touch(mainCol, collider, collidingColliderPoint, colNormal, colP1);
-
-            if (mainColliderPoint != Vector3.Zero) ReplaceTouch(mainCol, mainsTouch, currentTouch);
-            if (collidingColliderPoint != Vector3.Zero) ReplaceTouch(collider, colsTouch, currentTouchB);
-
-
-
-
-            return true;
-        }
-
-        bool PlaneToPlaneCollision(Object3d ob1, Object3d ob2, Collider mainCol, Collider collider, int currentTouch, int currentTouchB)
-        {
-            for (int f = 0; f < defaultColliderFaces.Length; f += 4)
-            {
-                Vector3[] plane =
-                {
-                                                    collider.points[defaultColliderFaces[f]],
-                                                    collider.points[defaultColliderFaces[f+1]],
-                                                    collider.points[defaultColliderFaces[f+2]],
-                                                    collider.points[defaultColliderFaces[f+3]],
-                                                };
-                var center = (plane[0] + plane[1] + plane[2] + plane[3]) / 4;
-                var normal = Vector3.Normalize(Vector3.Cross(plane[1] - plane[0], plane[2] - plane[0]));
-            }
-            return false;
-        }
 
         public enum collisionDetectionType
         {
             LinePlane,
             CorrnerPoints,
-            PlaneToPlane
+            PlaneToPlane,
+            CorrnerToPlane
         }
 
         public collisionDetectionType runingCollisionDetectionType = collisionDetectionType.LinePlane;
@@ -1156,11 +1010,14 @@ namespace sixth3D
                                             case collisionDetectionType.LinePlane:
                                                 touched = LinePlaneCollision(ob1, ob2, mainCol, collider, currentTouch, currentTouchB);
                                                 break;
-                                            case collisionDetectionType.CorrnerPoints:
-                                                touched = CorrnerPointsCollision(ob1, ob2, mainCol, collider, currentTouch, currentTouchB);
-                                                break;
-                                            case collisionDetectionType.PlaneToPlane:
-                                                touched = PlaneToPlaneCollision(ob1, ob2, mainCol, collider, currentTouch, currentTouchB);
+                                            //case collisionDetectionType.CorrnerPoints:
+                                            //    touched = CorrnerPointsCollision(ob1, ob2, mainCol, collider, currentTouch, currentTouchB);
+                                            //    break;
+                                            //case collisionDetectionType.PlaneToPlane:
+                                            //    touched = PlaneToPlaneCollision(ob1, ob2, mainCol, collider, currentTouch, currentTouchB);
+                                            //    break;
+                                            case collisionDetectionType.CorrnerToPlane:
+                                                touched = RevisedLinePlaneCollision(ob1, ob2, mainCol, collider, currentTouch, currentTouchB);
                                                 break;
 
                                         }
@@ -1180,7 +1037,7 @@ namespace sixth3D
                         }
                         foreach (Touch touch in mainCol.touchingColliders)
                         {
-                            if (false)
+                            if (true)
                             {
                                 var point = touch.point;
                                 var ob = ob1;
@@ -1317,8 +1174,17 @@ namespace sixth3D
                     var p = wantedFace.points;
 
                     //current[i].z = 
+
+
+
                     wantedFace.z = MathF.Min(MathF.Min(MathF.Min(p[0].Z, p[1].Z), p[2].Z), p[3].Z);
                     wantedFace.z = (p[0].Z + p[1].Z + p[2].Z + p[3].Z) / 4;
+
+                    //if (Keyboard.IsKeyDown(Key.Q))
+                    //for(int b =0; b < 4; b++)
+                    //{
+                    //    wantedFace.points[b] *= 6f;
+                    //}
 
                     if (faceListIndex >= faceList.Count)
                     {
@@ -1451,23 +1317,7 @@ namespace sixth3D
         private static extern bool SetCursorPos(int x, int y);
 
         float sens = 0.005f;
-        Matrix M4x4ToM3D(Matrix4x4 m)
-        {
-            var mat = new Matrix(
-                m.M11, m.M12,//m.M13,m.M14,
-                m.M21, m.M22, 0, 0//,m.M23,m.M24,
-                                  //m.M31,m.M32,m.M33,m.M34,
-                                  //m.M41,m.M42,m.M43,m.M44
-                );
-            //var mat = new Matrix(
-            //m.M11, m.M12, m.M13, m.M14,
-            //m.M21, m.M22, m.M23, m.M24,
-            //m.M31, m.M32, m.M33, m.M34,
-            //m.M41, m.M42, m.M43, m.M44
-            //);
 
-            return mat;
-        }
         void FullRender(DrawingContext drawingContext = null)
         {
             var renderWatch = System.Diagnostics.Stopwatch.StartNew();
@@ -1476,6 +1326,8 @@ namespace sixth3D
             firstRotate = Matrix4x4.CreateFromYawPitchRoll(camRot.Y, 0, 0);
             secondRotate = Matrix4x4.CreateFromYawPitchRoll(0, camRot.X, 0);
             firstPosition = Matrix4x4.CreateWorld(camPos, Vector3.UnitZ, Vector3.UnitY);
+            Matrix4x4 full = firstRotate * secondRotate;
+
             //Matrix4x4.Invert(firstPosition, out firstPosition);
             //rotateMatrix = Matrix4x4.Add(firstRotate,secondRotate);
 
@@ -1539,7 +1391,7 @@ namespace sixth3D
                         if (f.fullUpdate == true)
                         {
                             f.fullUpdate = false;
-                            // p.Fill = a;
+                            //p.Fill = a;
                             //ttttp.Stroke = Brushes.Black;
                             if (f.effects != null)
                             {

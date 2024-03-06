@@ -1,0 +1,208 @@
+﻿        public static Vector3 LinePlane3(Vector3 planePoint, Vector3 planeNormal, Vector3 linePoint, Vector3 lineDirection, float distance)
+        {
+            if (Vector3.Dot(planeNormal, Vector3.Normalize(lineDirection)) == 0)
+            {
+                return Vector3.Zero;
+            }
+
+            double t = (Vector3.Dot(planeNormal, (planePoint)) - Vector3.Dot(planeNormal, (linePoint))) / Vector3.Dot(planeNormal, (Vector3.Normalize(lineDirection)));
+            if (t > distance || (t < 0 && Math.Abs(t) <= lineDirection.Length() - distance)) return Vector3.Zero;
+            return linePoint + Vector3.Normalize(lineDirection) * (float)t;
+        }
+
+        Vector3 LinePlane2(Vector3 planeCenter, Vector3 planeNormal, Vector3 l0, Vector3 l1)
+        {
+            var u = l1 - l0;
+            var dot = Vector3.Dot(planeNormal, u);
+            //if (Math.Abs(dot) > PARALLEL_PLANE_DOT_TOLERENCE)
+            {
+                var w = l0 - planeCenter;
+                var fac = -Vector3.Dot(planeNormal, w) / dot;
+                u = u * fac;
+
+                return l0 + u;
+            }
+            return Vector3.Zero;
+        }
+                static bool Separated(Vector3[] vertsA, Vector3[] vertsB, Vector3 axis)
+        {
+            // Handles the cross product = {0,0,0} case
+            if (axis == Vector3.Zero)
+                return false;
+
+            var aMin = float.MaxValue;
+            var aMax = float.MinValue;
+            var bMin = float.MaxValue;
+            var bMax = float.MinValue;
+
+            // Define two intervals, a and b. Calculate their min and max values
+            for (var i = 0; i < 8; i++)
+            {
+                var aDist = Vector3.Dot(vertsA[i], axis);
+                aMin = aDist < aMin ? aDist : aMin;
+                aMax = aDist > aMax ? aDist : aMax;
+                var bDist = Vector3.Dot(vertsB[i], axis);
+                bMin = bDist < bMin ? bDist : bMin;
+                bMax = bDist > bMax ? bDist : bMax;
+            }
+
+            // One-dimensional intersection test between a and b
+            var longSpan = MathF.Max(aMax, bMax) - MathF.Min(aMin, bMin);
+            var sumSpan = aMax - aMin + bMax - bMin;
+            return longSpan >= sumSpan; // > to treat touching as intersection
+        }
+        
+        const float tolerence = 0f;
+        Vector3 HalfCorrnerCollision(Collider c1, Collider c2, Matrix4x4 inverseRotationOfC2)
+        {
+            var colliderPoints = c1.points;
+            for (int i = 0; i < colliderPoints.Length; i++)
+            {
+                var current = Vector3.Transform(colliderPoints[i], inverseRotationOfC2) - c2.position;
+                if (Math.Abs(current.X) <= c2.size.X * c2.scale.X + tolerence)
+                    if (Math.Abs(current.Y) <= c2.size.Y * c2.scale.Y + tolerence)
+                        if (Math.Abs(current.Z) <= c2.size.Z * c2.scale.Z + tolerence)
+                        {
+                            return colliderPoints[i];
+                        }
+            }
+            return Vector3.Zero;
+        }
+        /// <summary>
+        /// gets the closest c2's plane (normal and interection) from c1's corrner interection
+        /// </summary>
+        /// <param name="c1"></param>
+        /// <param name="c2"></param>
+        /// <param name=""></param>
+        /// <returns></returns>
+        (Vector3 pointOfInterection, Vector3 normal) EvaluateClosestPlaneToPoint(Collider c1, Collider c2, Vector3 c1ColliderPoint)
+        {
+            Vector3 planePoint = Vector3.Zero;
+            Vector3 planeNormal = Vector3.Zero;
+            for (int f = 0; f < defaultColliderFaces.Length; f += 4)
+            {
+                (var normal, var center) = EvaluatePlane(c2, f);
+                var point = LinePlane(center, normal, c1.position, Vector3.Normalize(c1ColliderPoint - c1.position), 1f);
+
+                if (planePoint != Vector3.Zero)
+                {
+                    if (Vector3.Distance(c1.position, planePoint) > Vector3.Distance(c1.position, point))
+                    {
+                        planePoint = point;
+                        planeNormal = normal;
+                    }
+                }
+                else
+                {
+                    planePoint = point;
+                    planeNormal = normal;
+                }
+            }
+            return (planePoint, planeNormal);
+        }
+
+        bool CorrnerPointsCollision(Object3d ob1, Object3d ob2, Collider mainCol, Collider collider, int currentTouch, int currentTouchB)
+        {
+
+            var mainRot = ob1.rotation;
+            var collRot = ob2.rotation;
+
+            //inverse matrixes
+            Matrix4x4 mainIrot;
+            Matrix4x4.Invert(Matrix4x4.CreateFromYawPitchRoll(mainRot.Y, mainRot.X, mainRot.Z), out mainIrot);
+            Matrix4x4 colliderIrot;
+            Matrix4x4.Invert(Matrix4x4.CreateFromYawPitchRoll(collRot.Y, collRot.X, collRot.Z), out colliderIrot);
+
+            // returns point on mainCol's corrner thats inside collider
+            Vector3 mainColliderPoint = HalfCorrnerCollision(mainCol, collider, colliderIrot);
+
+            // returns point on colliders's corrner thats inside mainCol
+            Vector3 collidingColliderPoint = HalfCorrnerCollision(collider, mainCol, mainIrot);
+
+            if (collidingColliderPoint == Vector3.Zero && mainColliderPoint == Vector3.Zero)
+            {
+                return false;
+            }
+
+            var dir = Vector3.Normalize(-ob1.velocity);
+
+            Vector3 closestPoint = Vector3.Zero;
+            float distance = 10000f;
+            Vector3 closestNormal = Vector3.Zero;
+            for (int f = 0; f < defaultColliderFaces.Length; f += 4)
+            {
+                (var normal, var center) = EvaluatePlane(collider, f);
+                var point = LinePlane(center, normal, mainColliderPoint, dir, 1f);
+                var dist = Vector3.Distance(point, mainColliderPoint);
+                if (distance != 0f)
+                {
+                    if (dist < distance)
+                    {
+                        closestPoint = point;
+                        distance = dist;
+                        closestNormal = normal;
+                    }
+                }
+                else
+                {
+                    distance = dist;
+                    closestNormal = normal;
+                    closestPoint = point;
+                }
+            }
+            var mainsTouch = new Touch(mainCol, collider, closestPoint, closestNormal, mainColliderPoint);
+
+
+            //    (var mainP1, var mainNormal) = EvaluateClosestPlaneToPoint(mainCol, collider, mainColliderPoint);
+            //if (Vector3.Distance(mainCol.position + mainNormal, collider.position) < Vector3.Distance(mainCol.position - mainNormal, collider.position))
+            //    mainNormal = -mainNormal;
+
+
+
+            (var colP1, var colNormal) = EvaluateClosestPlaneToPoint(collider, mainCol, collidingColliderPoint);
+            if (Vector3.Distance(collider.position + colNormal, mainCol.position) < Vector3.Distance(collider.position - colNormal, mainCol.position))
+                colNormal = -colNormal;
+
+            var colsTouch = new Touch(mainCol, collider, collidingColliderPoint, colNormal, colP1);
+
+            if (mainColliderPoint != Vector3.Zero) ReplaceTouch(mainCol, mainsTouch, currentTouch);
+            if (collidingColliderPoint != Vector3.Zero) ReplaceTouch(collider, colsTouch, currentTouchB);
+
+
+
+
+            return true;
+        }
+                bool PlaneToPlaneCollision(Object3d ob1, Object3d ob2, Collider mainCol, Collider collider, int currentTouch, int currentTouchB)
+        {
+            for (int f = 0; f < defaultColliderFaces.Length; f += 4)
+            {
+                Vector3[] plane =
+                {
+                                                    collider.points[defaultColliderFaces[f]],
+                                                    collider.points[defaultColliderFaces[f+1]],
+                                                    collider.points[defaultColliderFaces[f+2]],
+                                                    collider.points[defaultColliderFaces[f+3]],
+                                                };
+                var center = (plane[0] + plane[1] + plane[2] + plane[3]) / 4;
+                var normal = Vector3.Normalize(Vector3.Cross(plane[1] - plane[0], plane[2] - plane[0]));
+            }
+            return false;
+        }
+        Matrix M4x4ToM3D(Matrix4x4 m)
+        {
+            var mat = new Matrix(
+                m.M11, m.M12,//m.M13,m.M14,
+                m.M21, m.M22, 0, 0//,m.M23,m.M24,
+                                  //m.M31,m.M32,m.M33,m.M34,
+                                  //m.M41,m.M42,m.M43,m.M44
+                );
+            //var mat = new Matrix(
+            //m.M11, m.M12, m.M13, m.M14,
+            //m.M21, m.M22, m.M23, m.M24,
+            //m.M31, m.M32, m.M33, m.M34,
+            //m.M41, m.M42, m.M43, m.M44
+            //);
+
+            return mat;
+        }

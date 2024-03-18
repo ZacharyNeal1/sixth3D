@@ -14,7 +14,6 @@ namespace sixth3D
     /// </summary>
     public partial class App : Application
     {
-
     }
 
 

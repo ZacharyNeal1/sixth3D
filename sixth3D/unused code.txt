@@ -206,3 +206,46 @@
 
             return mat;
         }
+                private void CursorPos(int x, int y)
+        {
+            SetCursorPos(x, y);
+        }
+
+        [DllImport("User32.dll")]
+        private static extern bool SetCursorPos(int x, int y);
+
+                //Vector3 RotationMatrixTransform(Vector3 point, Vector3 rotation)
+        //{
+            
+        //    double[][] x = {
+        //     new double[] {1,0,0 },
+        //    new double[] {0,Math.Cos(rotation.X),-Math.Sin(rotation.X) },
+        //    new double[] {0,Math.Sin(rotation.X),Math.Cos(rotation.X) }
+        //    };
+        //    double[][] y = {
+        //     new double[] {Math.Cos(rotation.Y),0,Math.Sin(rotation.Y) },
+        //    new double[] {0,1,0 },
+        //    new double[] {-Math.Sin(rotation.Y), 0 , Math.Cos(rotation.Y) }
+        //    };
+        //    double[][] z = {
+        //     new double[] {Math.Cos(rotation.Z),-Math.Sin(rotation.Z),0 },
+        //    new double[] {Math.Sin(rotation.Z),Math.Cos(rotation.Z),0 },
+        //    new double[] {0,0,1 }
+        //    };
+
+        //    var normal = Vector3.Normalize(point);
+        //    double[] input = {normal.X,normal.Y,normal.Z,point.Length() };
+
+        //    return transform(input,);
+        //}
+
+        //Vector3 transform(float[] v, double[][] m)
+        //{
+        //    double[] result = new double[4];
+        //    for (int i = 0; i < 4; ++i)
+        //        result[i] = v[0] * m[0][i] + v[1] * m[1][i] + v[2] + m[2][i] + v[3] * m[3][i];
+        //    result[0] = result[0] / result[3];
+        //    result[1] = result[1] / result[3];
+        //    result[2] = result[2] / result[3];
+        //    return new Vector3((float)result[0], (float)result[1], (float)result[2]);
+        //}

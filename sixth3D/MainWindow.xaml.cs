@@ -94,7 +94,7 @@ namespace sixth3D
         float ab = 3;
         Object3d[] WorldObjects;
         //Vector3 camPos = new Vector3(-10f, 0, 0), camRot = new Vector3(0, -3f, 0);
-        public float speed = 5f;
+        public float speed = 15f;
         public float lookSpeed = 0.1f;
         float height = 30f;
 
@@ -334,22 +334,25 @@ namespace sixth3D
         Object3d holding;
         void CheckKeys()
         {
+            //
+            //cam.FindForward();
+            var normal = new Vector3((float)Math.Cos(cam.rotation.X), 0, (float)Math.Sin(cam.rotation.X));
             if (Keyboard.IsKeyDown(inputs[3]))
             {
-                cam.position += new Vector3((float)Math.Cos(cam.rotation.Y) * -speed, 0, (float)Math.Sin(cam.rotation.Y) * -speed);
+                cam.position += Vector3.Normalize(cam.right * new Vector3(1, 0, 1)) * speed;
             }
             if (Keyboard.IsKeyDown(inputs[1]))
             {
-                cam.position += new Vector3((float)Math.Cos(cam.rotation.Y) * speed, 0, (float)Math.Sin(cam.rotation.Y) * speed);
+                cam.position -= Vector3.Normalize(cam.right * new Vector3(1, 0, 1)) * speed ;
             }
-            var normal = new Vector3((float)Math.Cos(cam.rotation.Y) * speed, 0, (float)Math.Sin(cam.rotation.Y) * speed);
+
             if (Keyboard.IsKeyDown(inputs[0]))
             {
-                cam.position += new Vector3(normal.Z, 0, -normal.X);
+                cam.position -= Vector3.Normalize(cam.forward * new Vector3(1, 0, 1)) * speed;
             }
             if (Keyboard.IsKeyDown(inputs[2]))
             {
-                cam.position += new Vector3(-normal.Z, 0, normal.X);
+                cam.position += Vector3.Normalize(cam.forward * new Vector3(1, 0, 1)) * speed;
             }
 
             //camPos = new Vector3(camPos.X, h, camPos.Z);
@@ -357,11 +360,11 @@ namespace sixth3D
 
             if (Keyboard.IsKeyDown(inputs[5]))
             {
-                cam.rotation += new Vector3(0, -lookSpeed, 0);
+                cam.rotation += new Vector3(0, lookSpeed, 0);
             }
             if (Keyboard.IsKeyDown(inputs[6]))
             {
-                cam.rotation += new Vector3(0, lookSpeed, 0);
+                cam.rotation += new Vector3(0, -lookSpeed, 0);
             }
 
             if (Keyboard.IsKeyDown(inputs[4]))
@@ -441,7 +444,7 @@ namespace sixth3D
         }
         public Vector3 camPoint(Vector3 point)
         {
-            return Vector3.Transform(point, fullMatrix);
+            return Vector3.Transform(point, cam.WorldToEye);
         }
         Vector3 GetClosestPointOnLineSegment(Vector3 A, Vector3 B, Vector3 P)
         {
@@ -718,70 +721,6 @@ namespace sixth3D
             var center = (plane[0] + plane[1] + plane[2] + plane[3]) / 4;
             var normal = Vector3.Normalize(Vector3.Cross(plane[1] - plane[0], plane[2] - plane[0]));
             return (normal, center);
-        }
-        bool RevisedLinePlaneCollision(Object3d ob1, Object3d ob2, Collider mainCol, Collider collider, int currentTouch, int currentTouchB)
-        {
-
-            Vector3 closeNormal = Vector3.Zero, closeCenter = Vector3.Zero, closePoint = Vector3.Zero;
-            Vector3 fullNormal = Vector3.Zero, fullCenter = Vector3.Zero, fullPoint = Vector3.Zero;
-
-            float closeDot = -100f;
-            float fullDot = -100f;
-
-            float dotTolerence = 5f;
-
-            var points = mainCol.points;
-
-            bool touching = false;
-            for (int p = 0; p < points.Length; p++)
-            {
-                bool inside = true;
-                for (int f = 0; f < defaultColliderFaces.Length; f += 4)
-                {
-                    (var normal, var center) = EvaluatePlane(collider, f);
-                    var dot = Vector3.Dot(normal, points[p] - center);
-
-
-                    if (dot > dotTolerence)
-                    {
-                        inside = false;
-                        break;
-                    }
-                    else
-                    {
-                        if (dot > closeDot)
-                        {
-                            closeDot = dot;
-                            closeCenter = center;
-                            closeNormal = normal;
-                            closePoint = points[p];
-                        }
-                    }
-                }
-                if (fullPoint != Vector3.Zero)
-                {
-                    if (inside && Vector3.Distance(closePoint, collider.position) < Vector3.Distance(fullPoint, collider.position))
-                        goto True;
-                }
-                else if (inside) goto True;
-                True:
-                {
-                    touching = true;
-                    fullDot = closeDot;
-                    fullCenter = closeCenter;
-                    fullNormal = closeNormal;
-                    fullPoint = closePoint;
-                }
-            }
-            if (touching)
-            {
-                var t = new Touch(mainCol, collider, (-fullDot * fullNormal) + fullPoint, fullNormal, fullPoint);
-                ReplaceTouch(mainCol, t, currentTouch);
-            }
-
-
-
-            return touching;
         }
         bool LinePlaneCollision(Object3d ob1, Object3d ob2, Collider mainCol, Collider collider, int currentTouch, int currentTouchB)
         {
@@ -1076,36 +1015,25 @@ namespace sixth3D
             }
             return new PointCollection(b);
         }
-        Polygon NewPolygon() // just a simple way to make a instance of a polygon without making a ton of lines of code
-        {
-            Polygon p = new Polygon();
-            p.Stroke = Brushes.Black;
-            p.Fill = Brushes.LightBlue;
-            p.StrokeThickness = 1;
-            p.HorizontalAlignment = HorizontalAlignment.Left;
-            p.VerticalAlignment = VerticalAlignment.Center;
-            Point[] points = { new Point(0, 0), new Point(0, 100), new Point(100, 100), new Point(100, 0) };
-            p.Points = new PointCollection(points);
-            return p;
-        }
-
         void UpdateFaceList()
         {
             //faceList.Clear();
+            cam.UpdateWorldToEye();
             int faceListIndex = 0;
             for (int a = 0; a < WorldObjects.Length; a++)
             {
                 var current = WorldObjects[a].squareFaces;
                 for (int i = 0; i < current.Count; i++)
                 {
-                    var wantedFace = current[i].TransformAll(fullMatrix);//.TransformAll(firstRotate).TransformAll(secondRotate);
+                    var wantedFace = current[i].TransformAll(cam.WorldToEye);//.TransformAll(firstRotate).TransformAll(secondRotate);
                     var p = wantedFace.points;
 
                     //current[i].z = 
 
-
+                    //MathF.Min(MathF.Min(MathF.Min(p[0].Z, p[1].Z), p[2].Z), p[3].Z);
+                    //(p[0].Z + p[1].Z + p[2].Z + p[3].Z) / 4;
                     wantedFace.z = MathF.Min(MathF.Min(MathF.Min(p[0].Z, p[1].Z), p[2].Z), p[3].Z);
-                    wantedFace.z = (p[0].Z + p[1].Z + p[2].Z + p[3].Z) / 4;
+                    wantedFace.z = MathF.Max(MathF.Max(MathF.Max(p[0].Z, p[1].Z), p[2].Z), p[3].Z);
 
                     //if (Keyboard.IsKeyDown(Key.Q))
                     //for(int b =0; b < 4; b++)
@@ -1238,17 +1166,11 @@ namespace sixth3D
          //secondRotate = Matrix4x4.CreateRotationX(cam.rotation.X);
 
 
-            var x = Matrix4x4.CreateRotationX(cam.rotation.X);
-            var y = Matrix4x4.CreateRotationY(cam.rotation.Y);
-            var z = Matrix4x4.CreateRotationZ(cam.rotation.Z);
-            var pos = Matrix4x4.CreateTranslation(cam.position);
-            fullMatrix = pos * z * y * x;
 
-            
-            
+
+            cam.FindForward();
 
             //   var editedPoint = Vector3.Transform(Vector3.Transform(camPos, firstRotate), secondRotate);
-            cam.FindForward();
             tb.Text += cam.forward.ToString();
             tb.Text += "\n" + cam.position.ToString();
             //firstPosition = Matrix4x4.CreateWorld(cam.position, Vector3.UnitZ, Vector3.UnitY);
@@ -1283,8 +1205,6 @@ namespace sixth3D
                 ImageSource = mk,
             };
 
-            var pers = Matrix4x4.CreatePerspectiveFieldOfView(2.5f, (float)Width / (float)Height, 100f, 10000f);
-            var aspectRatio = Width / Height;
 
             for (int i = 0; i < faceList.Count; i++)
             {
@@ -1293,28 +1213,12 @@ namespace sixth3D
 
                 if (f.z > cam.nearPlane)
                 {
-                    //tb.Text += "\n added";
-                    //for (int vis = 0; vis < f.points.Length; vis++)
-                    //{
-                    //    if (f.points[vis].Z > 0) f.points[vis] = new Vector3(f.points[vis].X, f.points[vis].Y, 0);
-                    //}
-                    //Point[] visual = new Point[f.points.Length];
-
-                    //for (int a = 0; a < visual.Length; a ++)
-                    //{
-                    //    var tp = Vector3.Transform(f.points[a], eye);
-                    //    visual[a] = new Point(tp.X,tp.Y);
-                    //}
-
-
-
                     if (f.visual == null)
-
                     {
 
                         //if (f.z < cam.nearPlane)
                         ////{
-                        f.ScreenPos(fov, (float)Height, (float)Width, new Vector2(100f,100f));
+                        //f.ScreenPos(fov, (float)Height, (float)Width, new Vector2(100f,100f));
                         //f.visual = new Point[f.points.Length];
                         //for (int b = 0; b < f.points.Length; b++)
                         //{
@@ -1326,10 +1230,7 @@ namespace sixth3D
 
                         //    //f.visual[b] = new Point(tr.X+(Width/2),tr.Y/aspectRatio+(Height/2));
                         //}
-                       cam.PointAndPlane(f, Width,Height);
-
-                        // cam.PointAndPlane(f, (float)Width, (float)Height);
-                        // }
+                       f.visual = cam.PointAndPlane(f.points, Width,Height);
                     }
 
                     if (i > mainCanvas.Children.Count - 1)
@@ -1587,24 +1488,39 @@ namespace sixth3D
     {
         public Vector3 position { get; set; } = Vector3.Zero;
         /// <summary> rad
-        public Vector3 rotation { get; set; } = Vector3.Zero;
+        public Vector3 rotation { get; set; } = Vector3.UnitZ * MathF.PI;
 
         public Vector3 forward { get; set; } = Vector3.UnitZ;
+        public Vector3 up { get; set; } = -Vector3.UnitY;
+        public Vector3 right { get; set; } = Vector3.UnitX;
 
-        public float focalDistance { get; set; } = 100f;
         public float nearPlane { get; set; } = 10f;
 
         public Canvas[] output { get; set; }
 
         public float fov { get; set; } = 100f;
+        public Matrix4x4 WorldToEye { get; set; }
 
+        public void UpdateWorldToEye()
+        {
+            var x = Matrix4x4.CreateRotationX(rotation.X);
+            var y = Matrix4x4.CreateRotationY(rotation.Y);
+            var z = Matrix4x4.CreateRotationZ(rotation.Z);
+            var pos = Matrix4x4.CreateTranslation(position);
+            WorldToEye = pos * z * y * x;
+        }
 
         public void FindForward()
         {
             var x = Matrix4x4.CreateRotationX(rotation.X);
-            var y = Matrix4x4.CreateRotationY(-rotation.Y);
+            var y = Matrix4x4.CreateRotationY(rotation.Y);
             var z = Matrix4x4.CreateRotationZ(rotation.Z);
-            forward = Vector3.Normalize(Vector3.Transform(Vector3.Transform(Vector3.Transform(Vector3.UnitZ, z), y), x));
+            var fullMatrix = z * y * x;
+
+
+            forward = Vector3.Transform(Vector3.UnitZ, fullMatrix);
+            right = Vector3.Transform(Vector3.UnitX, fullMatrix);
+            up = Vector3.Transform(-Vector3.UnitY, fullMatrix);
         }
         public Point[] FacePoints(Face face, float Width, float Height)
         {
@@ -1617,9 +1533,11 @@ namespace sixth3D
             face.visual = p.ToArray();
             return p.ToArray();
         }
-        Vector3 LinePlane(Vector3 planePoint, Vector3 planeNormal, Vector3 linePos)
+        Vector3 LinePlane(Vector3 linePos)
         {
-            var lineDir = Vector3.Normalize(-linePos);
+            var planePoint = Vector3.UnitZ * nearPlane;
+            var planeNormal = Vector3.UnitZ;
+            var lineDir = Vector3.Normalize(- linePos);
 
             if (Vector3.Dot(planeNormal, lineDir) == 0) return Vector3.Zero;
 
@@ -1631,34 +1549,30 @@ namespace sixth3D
         } //not my funciton (edited and modifyed by me)
 
         public float planeSize { get; set; } = 10f;
-        public Point[] PointAndPlane(Face face, double width, double height)
+
+        public bool update = true;
+        public Point[] PointAndPlane(Vector3[] face, double width, double height)
         {
             var p = new List<Point>();
-            var points = face.points;
-            var planePoint = -Vector3.UnitZ * nearPlane;
-            var aspectRatio = (float)(height/width);
             var invAspectRatio = (float)(width / height);
             var plane_height = MathF.Tan((MathF.PI / 180f) * fov) * nearPlane * 2f;
             var plane_width = plane_height * invAspectRatio;
 
-            var phHalf = plane_height / 2f;
-            var pwHalf = plane_width / 2f;
-            for (int i = 0; i < points.Length; i++)
+            for (int i = 0; i < face.Length; i++)
             {
-                var current = points[i];
-                var edited = new Vector3(current.X, current.Y, (focalDistance + current.Z)/focalDistance);
-                var point = LinePlane(position, Vector3.UnitZ,edited);
-                point = new Vector3((point.X + pwHalf) / plane_width, (point.Y+phHalf) / plane_height, 0);
+                var current = face[i];
+                var edited = new Vector3(current.X, current.Y, current.Z);
+                if (edited.Z < nearPlane) edited.Z = nearPlane;
+                var point = LinePlane(edited);
+                point = new Vector3(point.X / plane_width + 0.5f, point.Y / plane_height + 0.5f, 0);
+                if (point.X > 1f) point.X = 1f;
+                if (point.X < 0f) point.X =0f;
+                if (point.Y > 1f) point.Y = 1f;
+                if (point.Y < 0f) point.Y = 0f;
 
-               // if (MathF.Abs(x) < planeSize && MathF.Abs(y) < planeSize * aspectRatio)
-                {
-                    
-                    p.Add(new Point((point.X)* width, (point.Y)*height));
-                }
-               // p.Add(new Point(0, 0));
+                p.Add(new Point((point.X)* width, (point.Y)*height));
                 
             }
-            face.visual = p.ToArray();
             return p.ToArray();
         }
 
@@ -1710,16 +1624,6 @@ namespace sixth3D
             visual = p.ToArray();
             return p.ToArray();
         }
-        //public Point[] ScreenPos(float fov, float Height, float Width)
-        //{
-        //    var p = new List<Point>();
-        //    for (int i = 0; i < points.Length; i++)
-        //    {
-        //        p.Add(new Point((int)((fov / (fov + points[i].Z)) * points[i].X) + (Width / 2), (int)((fov / (fov + points[i].Z)) * points[i].Y) + (Height / 2)));
-        //    }
-        //    visual = p.ToArray();
-        //    return p.ToArray();
-        //}
         public Face(Vector3[] p)
         {
             points = p;

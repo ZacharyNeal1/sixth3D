@@ -28,7 +28,7 @@ namespace sixth3D
                 new Value("app width"),
                 new Value("app height"),
                 new Value("cam nearplane"),
-                new Value("cam focaldist"),
+                //new Value("cam focaldist"),
                 new Value("cam fov"),
                 new Value("lookspeed"),
             };
@@ -88,9 +88,9 @@ namespace sixth3D
                         case "cam nearplane":
                             value = ap.cam.nearPlane.ToString();
                             break;
-                        case "cam focaldist":
-                            value = ap.cam.focalDistance.ToString();
-                            break;
+                        //case "cam focaldist":
+                        //    value = ap.cam.focalDistance.ToString();
+                        //    break;
                         case "cam fov":
                             value = ap.cam.fov.ToString();
                             break;
@@ -117,9 +117,9 @@ namespace sixth3D
                         case "cam nearplane":
                             ap.cam.nearPlane = float.Parse(value);
                             break;
-                        case "cam focaldist":
-                            ap.cam.focalDistance = float.Parse(value);
-                            break;
+                        //case "cam focaldist":
+                        //    ap.cam.focalDistance = float.Parse(value);
+                        //    break;
                         case "cam fov":
                             ap.cam.fov = float.Parse(value);
                             break;

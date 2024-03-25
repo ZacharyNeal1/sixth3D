@@ -249,3 +249,46 @@
         //    result[2] = result[2] / result[3];
         //    return new Vector3((float)result[0], (float)result[1], (float)result[2]);
         //}
+
+        failed culling
+
+                        Face zface = faces[0];
+                for (int i = 0; i < faces.Count; i++)
+                {
+                    if (i != 0 && zface.z > faces[i].z) zface = faces[i];
+                }
+                var p = zface.points;
+                var max = MathF.Max(MathF.Max(MathF.Max(p[0].Z, p[1].Z), p[2].Z), p[3].Z);
+                Vector3[] normals =
+                {
+                    Normal(p[0], p[1], Vector3.Normalize(p[1])*max),
+                    Normal(p[1], p[2], Vector3.Normalize(p[2])*max),
+                    Normal(p[2], p[3], Vector3.Normalize(p[3])*max),
+                    Normal(p[3], p[0], Vector3.Normalize(p[0])*max)
+                  };
+                for (int i = 0; i < faces.Count; i ++)
+                {
+                    foreach (Vector3 n in normals)
+                    {
+                        if (Vector3.Dot(n,faces[i].)>0)
+                        {
+                        }
+                    }
+
+                }
+
+                orthognal projeciton within a class of a face 
+                        public Point[] ScreenPos(float fov, float Height, float Width, Vector2 bounds)
+        {
+            var p = new List<Point>();
+            for (int i = 0; i < points.Length; i++)
+            {
+                var fz = fov / (fov + points[i].Z);
+                var x = (int)(fz * points[i].X) + (Width / 2);
+                var y = (int)(fz * points[i].Y) + (Height / 2);
+
+                p.Add(new Point(x, y));
+            }
+            visual = p.ToArray();
+            return p.ToArray();
+        }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -31,6 +32,8 @@ namespace sixth3D
                 //new Value("cam focaldist"),
                 new Value("cam fov"),
                 new Value("lookspeed"),
+                new Value("cam2 pos"),
+                new Value("cam2 rot"),
             };
         Button b = new Button();
         Button b1 = new Button();
@@ -97,6 +100,12 @@ namespace sixth3D
                         case "lookspeed":
                             value = ap.lookSpeed.ToString();
                             break;
+                        case "cam2 pos":
+                            value = ap.cam2.position.ToString();
+                            break;
+                        case "cam2 rot":
+                            value = ap.cam2.rotation.ToString();
+                            break;
                     }
 
             }
@@ -126,6 +135,12 @@ namespace sixth3D
                         case "lookspeed":
                             ap.lookSpeed = float.Parse(value);
                             break;
+                        //case "cam2 pos":
+                        //    ap.lookSpeed = Vector3.Parse(value);
+                        //    break;
+                        //case "cam2 rot":
+                        //    ap.lookSpeed = Vector3.Parse(value);
+                        //    break;
                     }
             }
 

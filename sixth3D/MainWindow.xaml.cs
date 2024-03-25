@@ -94,9 +94,8 @@ namespace sixth3D
         float ab = 3;
         Object3d[] WorldObjects;
         //Vector3 camPos = new Vector3(-10f, 0, 0), camRot = new Vector3(0, -3f, 0);
-        public float speed = 15f;
-        public float lookSpeed = 0.1f;
-        float height = 30f;
+        public float speed = 8f;
+        public float lookSpeed = 0.05f;
 
         const float fps = 240;
         float FixedInterval = 1000 / fps;
@@ -118,10 +117,14 @@ namespace sixth3D
         TextBlock tb;
         TextBlock infoBox;
         BitmapImage mk;
-        public Camera cam = new Camera();
+        public Camera cam;
+        public Camera cam2;
         public MainWindow()
         {
             InitializeComponent();
+
+            cam = new Camera();
+            cam2 = new Camera();
 
             tb = new TextBlock();
             tb.Text = "test";
@@ -241,7 +244,7 @@ namespace sixth3D
 
             FullCanvas.Children.Add(new System.Windows.Shapes.Ellipse()
             {
-                RenderTransform = new TranslateTransform() { X = wind.Width / 2f + 5f, Y = wind.Height / 2f + 5f },
+                RenderTransform = new TranslateTransform() { X = wind.Width / 2f, Y = wind.Height / 2f },
                 Fill = Brushes.Red,
                 Height = 10f,
                 Width = 10f
@@ -284,7 +287,7 @@ namespace sixth3D
                 Key.P,
                  Key.LeftShift,
                 Key.LeftCtrl,
-               
+
             };
 
         Key[] toggles =
@@ -300,20 +303,34 @@ namespace sixth3D
 
         private void ConstantTimerUpdate(object sender, EventArgs e)
         {
+            tb.Text = "";
             CheckKeys();
 
             if (holding != null)
             {
                 //FindForward();
-                holding.velocity += ((cam.position + cam.forward * 150f) - holding.position) * new Vector3(0.8f, 1.2f, 0.8f);
+                
+                holding.velocity += ((cam.position + cam.forward * 150f) - holding.position);
             }
             if (simulate)
                 FullCollide();
 
             //FindForward();
+            cam.UpdateAuxiliaryVars();
+
+            var plyl = debugCanvas.Children[controlledDebugCanvas.GetOrAdd("forward cam vec", 1)] as Polyline;
+            plyl.StrokeThickness = 1f;
+            plyl.Fill = Brushes.Transparent;
+            plyl.Stroke = Brushes.Blue;
+            plyl.Points = new PointCollection(cam.VectorToView(new Vector3[] {cam.position * 100f, cam.position + cam.forward* 1000f})) ;
+            tb.Text += cam.position.ToString();
+            if (Keyboard.IsKeyDown(Key.G))
+            WorldObjects[0].position = cam.position;
+            
             Touch info = AdvancedRaycast(cam.position, cam.forward, 10000f);
             if (info != null)
             {
+                tb.Text += "\n hit";
                 var p = screen(camPoint(info.bodyA.position));
                 infoBox.RenderTransform = new TranslateTransform()
                 {
@@ -336,23 +353,22 @@ namespace sixth3D
         {
             //
             //cam.FindForward();
-            var normal = new Vector3((float)Math.Cos(cam.rotation.X), 0, (float)Math.Sin(cam.rotation.X));
             if (Keyboard.IsKeyDown(inputs[3]))
             {
-                cam.position += Vector3.Normalize(cam.right * new Vector3(1, 0, 1)) * speed;
+                cam.position -= Vector3.Normalize(cam.right * new Vector3(1, 0, 1)) * speed;
             }
             if (Keyboard.IsKeyDown(inputs[1]))
             {
-                cam.position -= Vector3.Normalize(cam.right * new Vector3(1, 0, 1)) * speed ;
+                cam.position += Vector3.Normalize(cam.right * new Vector3(1, 0, 1)) * speed;
             }
 
             if (Keyboard.IsKeyDown(inputs[0]))
             {
-                cam.position -= Vector3.Normalize(cam.forward * new Vector3(1, 0, 1)) * speed;
+                cam.position += Vector3.Normalize(cam.forward * new Vector3(1, 0, 1)) * speed;
             }
             if (Keyboard.IsKeyDown(inputs[2]))
             {
-                cam.position += Vector3.Normalize(cam.forward * new Vector3(1, 0, 1)) * speed;
+                cam.position -= Vector3.Normalize(cam.forward * new Vector3(1, 0, 1)) * speed;
             }
 
             //camPos = new Vector3(camPos.X, h, camPos.Z);
@@ -383,7 +399,7 @@ namespace sixth3D
                 if (holding == null)
                 {
                     //FindForward();
-                    var t = AdvancedRaycast(cam.position,cam.forward, 5000f);
+                    var t = AdvancedRaycast(cam.position, cam.forward, 10000f);
                     if (t != null) holding = t.bodyA.possibleParent;
                 }
 
@@ -401,14 +417,15 @@ namespace sixth3D
             }
             if (Keyboard.IsKeyDown(inputs[9])) simulate = false;
             if (Keyboard.IsKeyDown(inputs[10])) simulate = true;
-            if (Keyboard.IsKeyDown(inputs[11])) cam.position += new Vector3(0,10f,0);
+            if (Keyboard.IsKeyDown(inputs[11])) cam.position += new Vector3(0, 10f, 0);
             if (Keyboard.IsKeyDown(inputs[12])) cam.position -= new Vector3(0, 10f, 0);
 
             if (Keyboard.IsKeyDown(toggles[0]))
             {
                 if (toggleStates[0] == false)
                 {
-                    renderColliders = !renderColliders;
+                    cam2.position = cam.position;
+                    cam2.rotation = cam.rotation;
 
                 }
                 toggleStates[0] = true;
@@ -445,6 +462,10 @@ namespace sixth3D
         public Vector3 camPoint(Vector3 point)
         {
             return Vector3.Transform(point, cam.WorldToEye);
+        }
+        float DistFromPlane(Vector3 P, Vector3 normal)
+        {
+            return Vector3.Dot(normal, P);
         }
         Vector3 GetClosestPointOnLineSegment(Vector3 A, Vector3 B, Vector3 P)
         {
@@ -491,11 +512,27 @@ namespace sixth3D
         const float gravity = 9.8f * 500f;
         const float defaultVeloctyDecay = 0.985f;
         const float floorYValue = 100f;
+        public static Vector3 lineIntersection(Vector3 planePoint, Vector3 planeNormal, Vector3 linePoint, Vector3 lineDirection)
+        {
+            double t = (Vector3.Dot(planeNormal,planePoint) - Vector3.Dot(planeNormal,linePoint) / Vector3.Dot(planeNormal,Vector3.Normalize( lineDirection)));
+            return Vector3.Add(linePoint,Vector3.Multiply(Vector3.Normalize(lineDirection),(float)t));
+        }
+        public void Grid(Vector3 p0, Vector3 p2, Vector3 normal, string str)
+        {
+
+            var plyl = debugCanvas.Children[controlledDebugCanvas.GetOrAdd(str + ".0", 1)] as Polyline;
+            plyl.StrokeThickness = 1f;
+            plyl.Fill = Brushes.Transparent;
+            plyl.Stroke = Brushes.Blue;
+            plyl.Points = new PointCollection(cam.VectorToView(new Vector3[] { p0 }));
+        }
         Touch AdvancedRaycast(Vector3 linePoint, Vector3 lineDir, float distance)
         {
             Touch t = null;
             foreach (Object3d ob1 in WorldObjects) if (ob1.colliders != null) foreach (Collider mainCol in ob1.colliders)
                     {
+
+                        mainCol.GeneratePoints();
                         for (int f = 0; f < defaultColliderFaces.Length; f += 4)
                         {
                             Vector3[] plane =
@@ -507,39 +544,50 @@ namespace sixth3D
                                                 };
                             var center = (plane[0] + plane[1] + plane[2] + plane[3]) / 4;
                             var normal = Vector3.Normalize(Vector3.Cross(plane[1] - plane[0], plane[2] - plane[0]));
+                            //  if (Vector3.Distance(normal + center, mainCol.position) < Vector3.Distance(center - normal, mainCol.position))
+                            // normal = -normal;
 
-                            //find where a inf line and a inf hyperplane touch
-                            var point = LinePlane(center, normal, linePoint, lineDir, 10000f);
+                            var point = LinePlane(center, normal, linePoint, lineDir);
+
+                            var u = Vector3.Normalize(plane[1] - plane[0]);
+                            var v = Vector3.Normalize(Vector3.Cross(u, normal));
+
+                            //var projection = Vector3.Transform(point, Matrix4x4.CreateWorld(Vector3.Zero, normal, lineDir));
+                           // tb.Text += "\n" + projection.ToString(); 
 
 
-                            if (point != Vector3.Zero)
-                            {
-                                var u = Vector3.Normalize(plane[1] - plane[0]);
-                                var v = Vector3.Normalize(Vector3.Cross(u, normal));
 
-                                var x = Vector3.Dot(center - point, u); //projects the 3d point of hit to the 2d hyperplane cords
-                                var y = Vector3.Dot(center - point, v);
+                            var x = Vector3.Dot(center - point, u); //projects the 3d point of hit to the 2d hyperplane cords
+                            var y = Vector3.Dot(center - point, v);
+
+                            //var plyl2 = debugCanvas.Children[controlledDebugCanvas.GetOrAdd("advRay." + f.ToString() + ".2", 1)] as Polyline;
+                            //plyl2.StrokeThickness = 1f;
+                            //plyl2.Fill = Brushes.Transparent;
+                            //plyl2.Stroke = Brushes.Green;
+                            //plyl2.Points = new PointCollection(cam.VectorToView(new Vector3[] { center, point }));
+
+                            var plyl3 = debugCanvas.Children[controlledDebugCanvas.GetOrAdd("advRay." + f.ToString() + ".3", 1)] as Polyline;
+                            plyl3.StrokeThickness = 2f;
+                            plyl3.Fill = Brushes.Transparent;
+                            plyl3.Stroke = Brushes.Brown;
+                            plyl3.Points = new PointCollection(cam.VectorToView(new Vector3[] { center, center + x* u, (center + x *u) + y * v }));
+
+                            
+
 
                                 if (
-                                    Math.Abs(x) < mainCol.size.X
+                                    Math.Abs(x) < 50f
                                     &&
-                                    Math.Abs(y) < mainCol.size.X
+                                    Math.Abs(y) < 50f
                                     )
                                 {
                                     //  tb.Text += "\n" + x + " " + y;
 
-                                    t = new Touch(mainCol, null, point, normal);
-
-                                    goto FullBreak;
+                                    return new Touch(mainCol, null, point, normal);
                                 }
-                            }
 
                         }
                     }
-                FullBreak:
-            {
-
-            }
             return t;
         }
 
@@ -609,7 +657,17 @@ namespace sixth3D
             5,4,7,6,
             7,6,2,3
         };
+        Vector3 LinePlane(Vector3 planePoint, Vector3 planeNormal, Vector3 linePos, Vector3 lineDir)
+        {
+            lineDir = Vector3.Normalize(lineDir);
 
+
+            var t = (Vector3.Dot(planeNormal, planePoint) - Vector3.Dot(planeNormal, linePos)) / Vector3.Dot(planeNormal, lineDir);
+            var final = linePos + (lineDir * t);
+            // if (Vector3.Distance(linePos + (lineDir * distance / 2), final) < distance / 2)
+
+            return final;
+        } //not my funciton (edited and modifyed by me)
         Vector3 LinePlane(Vector3 planePoint, Vector3 planeNormal, Vector3 linePos, Vector3 lineDir, float distance)
         {
             lineDir = Vector3.Normalize(lineDir);
@@ -833,7 +891,7 @@ namespace sixth3D
 
         void FullCollide()
         {
-            tb.Text = "";
+            //tb.Text = "";
             var watch = System.Diagnostics.Stopwatch.StartNew();
 
             var scaledTime = ConstantTimer.Interval.TotalSeconds;
@@ -1018,7 +1076,6 @@ namespace sixth3D
         void UpdateFaceList()
         {
             //faceList.Clear();
-            cam.UpdateWorldToEye();
             int faceListIndex = 0;
             for (int a = 0; a < WorldObjects.Length; a++)
             {
@@ -1080,11 +1137,11 @@ namespace sixth3D
                             for (int a = 0; a < 8; a++)
                             {
                                 tr[a] = camPoint(collider.points[a]);
-                                avg += tr[a].Z / 8f;
+                                avg = Math.Min(tr[a].Z,avg);
                             }
                             for (int a = 0; a < 8; a++)
                             {
-                                ps[a] = screen(tr[a]);
+                                ps[a]  = screen(tr[a] * new Vector3(-1,-1,1));
                             }
                             var l = debugCanvas.Children[controlledDebugCanvas.GetOrAdd(collider.ID.ToString() + ".line", 0)] as Polygon;
                             l.Points = new PointCollection(ps);
@@ -1109,7 +1166,7 @@ namespace sixth3D
 
 
                             Polyline l3 = debugCanvas.Children[controlledDebugCanvas.GetOrAdd(collider.ID.ToString() + ".vel", 1)] as Polyline;
-                            l3.Points = V3ToScreen(new Vector3[] { e.position, e.velocity + e.position });
+                            l3.Points = new PointCollection( cam.VectorToView(new Vector3[] { e.position, e.velocity + e.position }));
                             l3.Fill = Brushes.Red;
                             //debugCanvas.Children[index] = l3;
                             index++;
@@ -1119,18 +1176,18 @@ namespace sixth3D
                             //l4.Points = new PointCollection(new Point[] { screen(camPoint(e.position)), screen(camPoint(e.angularVelocity*100f + e.position)) });
                             //l4.Stroke = Brushes.Blue;
                             //index++;
-                            for (int tc = 0; tc < collider.touchingColliders.Count; tc++) 
+                            for (int tc = 0; tc < collider.touchingColliders.Count; tc++)
                             {
                                 var aa = collider.touchingColliders[tc];
                                 Polygon discard;
-                                Polyline l1 = debugCanvas.Children[controlledDebugCanvas.GetOrAdd(collider.ID.ToString() + "."+tc+".dif", 1)] as Polyline;
-                                l1.Points = V3ToScreen(new Vector3[] { aa.point, aa.secondPoint });
+                                Polyline l1 = debugCanvas.Children[controlledDebugCanvas.GetOrAdd(collider.ID.ToString() + "." + tc + ".dif", 1)] as Polyline;
+                                l1.Points = new PointCollection(cam.VectorToView(new Vector3[] { aa.point, aa.secondPoint }));
                                 l1.Stroke = Brushes.Cyan;
                                 //debugCanvas.Children[index] = l1;
                                 index++;
 
                                 Polyline l2 = debugCanvas.Children[controlledDebugCanvas.GetOrAdd(collider.ID.ToString() + "." + tc + ".norm", 1)] as Polyline;
-                                l2.Points = V3ToScreen(new Vector3[] { aa.point, aa.normal * 100f + aa.point });
+                                l2.Points = new PointCollection(cam.VectorToView(new Vector3[] { aa.point, aa.normal * 100f + aa.point }));
                                 l2.Stroke = Brushes.Yellow;
                                 //debugCanvas.Children[index] = l2;
                                 index++;
@@ -1146,41 +1203,21 @@ namespace sixth3D
             //}
 
             Polyline l4 = debugCanvas.Children[controlledDebugCanvas.GetOrAdd("camNorm", 1)] as Polyline;
-            l4.Points = V3ToScreen(new Vector3[] { cam.position + cam.forward*100f, cam.position + cam.forward*1000f });
+            if (Keyboard.IsKeyDown(Key.Y))
+                oldNormal = cam.forward;
+                l4.Points = new PointCollection(cam.VectorToView(new Vector3[] { cam.position, cam.position + oldNormal * 100f })); 
             l4.Stroke = Brushes.Yellow;
             //debugCanvas.Children[index] = l2;
             index++;
 
             controlledDebugCanvas.ClearUnsed();
         }
-
+        Vector3 oldNormal = Vector3.Zero;
         Matrix4x4 fullMatrix = new Matrix4x4();
         void FullRender(DrawingContext drawingContext = null)
         {
             var renderWatch = System.Diagnostics.Stopwatch.StartNew();
             var watch = System.Diagnostics.Stopwatch.StartNew();
-
-            //firstRotate = Matrix4x4.CreateFromYawPitchRoll(camRot.Y, 0, 0);
-            //secondRotate = Matrix4x4.CreateFromYawPitchRoll(0, camRot.X, 0);
-         //firstRotate = Matrix4x4.CreateRotationY(cam.rotation.Y);
-         //secondRotate = Matrix4x4.CreateRotationX(cam.rotation.X);
-
-
-
-
-            cam.FindForward();
-
-            //   var editedPoint = Vector3.Transform(Vector3.Transform(camPos, firstRotate), secondRotate);
-            tb.Text += cam.forward.ToString();
-            tb.Text += "\n" + cam.position.ToString();
-            //firstPosition = Matrix4x4.CreateWorld(cam.position, Vector3.UnitZ, Vector3.UnitY);
-            //Matrix4x4.CreateLookAt(cam.position,cam.forward, Vector3.UnitY);
-            //Matrix4x4 full = firstRotate * secondRotate;
-
-
-            //Matrix4x4.Invert(firstPosition, out firstPosition);
-            //rotateMatrix = Matrix4x4.Add(firstRotate,secondRotate);
-
 
             foreach (Object3d object3D in WorldObjects)
             {
@@ -1189,118 +1226,421 @@ namespace sixth3D
                     object3D.Rotate();
                 }
             }
-            UpdateFaceList(); //transforms all faces more info below
-            /* imagine a camrea lets say at (10,10,10) xyz
-            * this funciton transforms all points to make the cam at (0,0,0)
-            * all other points/faces update to stay in the same place relitive to the cam
-            * all of the faces points get translated by the position then the y rotaion then the x rotaion
-            * after being translated or transformed (i dont know the diffrence) all points infront of the camrea will have a positive z value 
-            * 
-            * thats the first thing this function does
-            * then the second thing is just sort the faces by the z value (higher z value first) a higher z vaule means it is farther from the cam
-            */
+            cam.width = Width;
+            cam.height = Height;
+            cam.output = mainCanvas;
+            cam.CamOutputType = Camera.OutputType.Canvas;
 
+            cam2.width = Width;
+            cam2.height = Height;
+            cam2.CamOutputType = Camera.OutputType.WorldChildList;
 
-            var a = new ImageBrush() {
-                ImageSource = mk,
-            };
+            cam2.Render(WorldObjects, new Face[] { });
+            //UpdateFaceList();
+            cam.Render(WorldObjects, cam2.outputChildren.ToArray());
+            RenderColliders();
+            //for (int i = 0; i < faceList.Count; i++)
+            //{
 
+            //    var f = faceList[i];
 
-            for (int i = 0; i < faceList.Count; i++)
+            //    if (f.z > cam.nearPlane)
+            //    {
+            //        if (f.visual == null)
+            //        {
+            //           f.visual = cam.PointAndPlane(f.points);
+            //        }
+
+            //        if (i > mainCanvas.Children.Count - 1)
+            //        {
+
+            //            Polygon p = new Polygon();
+            //            p.Stroke = Brushes.Black;
+            //            p.Fill = Brushes.LightBlue;
+            //            p.StrokeThickness = 1;
+            //            p.HorizontalAlignment = HorizontalAlignment.Left;
+            //            p.VerticalAlignment = VerticalAlignment.Center;
+            //            p.Points = new PointCollection(f.visual);
+            //            mainCanvas.Children.Add(p);
+            //        }
+            //        else
+            //        {
+
+            //            var p = mainCanvas.Children[i] as Polygon;
+            //            var pc = new PointCollection(f.visual);
+            //            p.Points = pc;
+            //            p.Visibility = Visibility.Visible;
+            //            if (f.z < 0) p.Fill = Brushes.Orange;
+            //            if (f.fullUpdate == true)
+            //            {
+            //                f.fullUpdate = false;
+            //                //p.Fill = a;
+            //                //ttttp.Stroke = Brushes.Black;
+            //                if (f.effects != null)
+            //                {
+            //                    p.Effect = f.effects;
+            //                }
+            //            }
+            //        }
+            //    }
+            //    else
+            //    {
+            //        if (i < mainCanvas.Children.Count)
+            //        {
+            //            mainCanvas.Children[i].Visibility = Visibility.Hidden;
+            //        }
+            //    }
+            //}
+
+            //RenderColliders();
             {
+                watch.Stop();
+                var g = debugCanvas.Children[controlledDebugCanvas.GetOrAdd("updateTimer", 0)] as Polygon;
+                g.Fill = Brushes.BurlyWood;
+                g.Points = new PointCollection() { new Point(0, 0), new Point(watch.ElapsedMilliseconds, 0), new Point(watch.ElapsedMilliseconds, 10), new Point(0, 10) };
+                //debugCanvas.Children[0] = g;
+                RenderTimer.Interval = new TimeSpan(0, 0, 0, 0, (int)watch.ElapsedMilliseconds + 1);
+                // tb.Text += "\n" + watch.ElapsedMilliseconds;
+                this.Dispatcher.BeginInvoke(
+                    DispatcherPriority.Loaded,
+                     new Action(() =>
+                     {
+                         renderWatch.Stop();
+                         var a = debugCanvas.Children[controlledDebugCanvas.GetOrAdd("renderTimer", 0)] as Polygon;
+                         a.Points = new PointCollection() { new Point(0, 30), new Point(renderWatch.ElapsedMilliseconds, 30), new Point(renderWatch.ElapsedMilliseconds, 40), new Point(0, 40) };// "\n Took " + renderWatch.ElapsedMilliseconds + " ms";
+                     }));
+            }
+            return;
+        }
+    }
 
-                var f = faceList[i];
+    public class Camera
+    {
+        public static int count = 0;
+        public int ID { get; set; }
+        public Vector3 position { get; set; } = Vector3.Zero;
+        /// <summary> rad
+        public Vector3 rotation { get; set; } = Vector3.UnitZ * MathF.PI;
 
-                if (f.z > cam.nearPlane)
+        public Vector3 forward { get; set; } = Vector3.UnitZ;
+        public Vector3 up { get; set; } = -Vector3.UnitY;
+        public Vector3 right { get; set; } = Vector3.UnitX;
+
+        public float nearPlane { get; set; } = 10f;
+
+        public Canvas output { get; set; }
+        public float fov { get; set; } = 100f;
+        public Matrix4x4 WorldToEye { get; set; }
+        /// <summary>
+        /// normally the viewport/screen width but when used in world space it is the world frame size
+        /// </summary>
+        public double width { get; set; }
+        /// <summary>
+        /// normally the viewport/screen height but when used in world space it is the world frame size
+        /// </summary>
+        public double height { get; set; }
+        public OutputType CamOutputType { get; set; }
+        /// <summary>
+        /// <
+        /// </summary>
+        public enum OutputType
+        {
+            Canvas,
+            ChildList,
+            CanvasAndChildList,
+            WorldChildList,
+            None
+        };
+
+        public Camera()
+        {
+            ID = count++;
+        }
+        public void UpdateAuxiliaryVars()
+        {
+            var x = Matrix4x4.CreateRotationX(rotation.X);
+            var y = Matrix4x4.CreateRotationY(rotation.Y);
+            var z = Matrix4x4.CreateRotationZ(rotation.Z);
+            var pos = Matrix4x4.CreateTranslation(-position);
+            var fullMatrix = z * y * x;
+
+            WorldToEye = pos * z * y * x;
+            forward = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, fullMatrix));
+            //forward = new Vector3(forward.X, -forward.Y,forward.Z);
+            right = Vector3.Normalize(Vector3.Transform(Vector3.UnitX, fullMatrix));
+            up = Vector3.Normalize(Vector3.Transform(-Vector3.UnitY, fullMatrix));
+        }
+        public List<Face> outputChildren = new List<Face>();
+        public void Render(Object3d[] input, Face[] extras)
+        {
+            UpdateAuxiliaryVars();
+
+            foreach (Object3d o in input) o.Rotate();
+
+
+            List<Face> f;
+            if (CamOutputType == OutputType.WorldChildList)
+                f = FaceListWorld(input, extras);
+            else
+                f = FaceList(input, extras);
+
+            //Matrix4x4 invWorld = new Matrix4x4();
+
+            //if (worldProjection == true)
+            //{
+            //    outputChildren.Clear();
+            //    Matrix4x4.Invert(WorldToEye, out invWorld);
+            //}
+            outputChildren.Clear();
+            if (CamOutputType == OutputType.WorldChildList || CamOutputType == OutputType.ChildList || CamOutputType == OutputType.CanvasAndChildList)
+            {
+                
+            }
+            
+            if (CamOutputType == OutputType.Canvas || CamOutputType == OutputType.CanvasAndChildList)
+            {
+                int i = 0;
+                for (; i < f.Count; i++)
                 {
-                    if (f.visual == null)
+                    var c = f[i];
+                    c.visual = PointAndPlane(c.points);
+
+                    if (i > output.Children.Count - 1)
                     {
-
-                        //if (f.z < cam.nearPlane)
-                        ////{
-                        //f.ScreenPos(fov, (float)Height, (float)Width, new Vector2(100f,100f));
-                        //f.visual = new Point[f.points.Length];
-                        //for (int b = 0; b < f.points.Length; b++)
-                        //{
-                        //    //var current = f.points[b];
-                        //    //current = new Vector3(current.X, current.Y, current.Z);
-                        //    //var tr = Vector3.Transform(current, pers);
-                        //    //tb.Text += "\n" + tr.ToString();
-
-
-                        //    //f.visual[b] = new Point(tr.X+(Width/2),tr.Y/aspectRatio+(Height/2));
-                        //}
-                       f.visual = cam.PointAndPlane(f.points, Width,Height);
-                    }
-
-                    if (i > mainCanvas.Children.Count - 1)
-                    {
-
-                        Polygon p = new Polygon();
-                        p.Stroke = Brushes.Black;
-                        p.Fill = Brushes.LightBlue;
-                        p.StrokeThickness = 1;
-                        p.HorizontalAlignment = HorizontalAlignment.Left;
-                        p.VerticalAlignment = VerticalAlignment.Center;
-                        p.Points = new PointCollection(f.visual);
-                        mainCanvas.Children.Add(p);
+                        output.Children.Add(
+                            new Polygon()
+                            {
+                                Visibility = Visibility.Visible,
+                                Points = new PointCollection(c.visual),
+                                Stroke = Brushes.Black,
+                                Fill = Brushes.LightBlue,
+                                StrokeThickness = 1
+                            });
                     }
                     else
                     {
-
-                        var p = mainCanvas.Children[i] as Polygon;
-                        var pc = new PointCollection(f.visual);
-                        p.Points = pc;
+                        var p = output.Children[i] as Polygon;
+                        p.Points = new PointCollection(c.visual);
                         p.Visibility = Visibility.Visible;
-                        if (f.z < 0) p.Fill = Brushes.Orange;
-                        if (f.fullUpdate == true)
-                        {
-                            f.fullUpdate = false;
-                            //p.Fill = a;
-                            //ttttp.Stroke = Brushes.Black;
-                            if (f.effects != null)
-                            {
-                                p.Effect = f.effects;
-                            }
-                        }
-
-
-
-
                     }
+
+                    if (c.z < 0 && i < output.Children.Count) output.Children[i].Visibility = Visibility.Hidden;
                 }
-                else
-                {
-                    if (i < mainCanvas.Children.Count)
+                for (; i < output.Children.Count; i++)
                     {
-                        //var p = mainCanvas.Children[i] as Polygon;
-                        mainCanvas.Children[i].Visibility = Visibility.Hidden;
-                        //p.Fill = Brushes.Transparent;
-                        //p.Stroke = Brushes.Transparent;
+                    output.Children[i].Visibility = Visibility.Hidden;
+                }
+            }
+
+            if (CamOutputType == OutputType.ChildList || CamOutputType == OutputType.CanvasAndChildList)
+            {
+                for (int i = 0; i < f.Count; i++)
+                {
+                    var c = f[i];
+                    c.visual = PointAndPlane(c.points);
+                    outputChildren.Add(c);
+                }
+            }
+
+            if (CamOutputType == OutputType.WorldChildList)
+            {
+                for (int i = 0; i < f.Count; i++)
+                {
+                    
+                    var c = f[i];
+                    if (c.z > 0)
+                    {
+                        c.points = PointAndPlaneWorld(c.points, c.z / 100f);
+                        outputChildren.Add(c);
                     }
                 }
             }
 
-            //RenderColliders();
-
-            watch.Stop();
-                var g = debugCanvas.Children[controlledDebugCanvas.GetOrAdd("updateTimer", 0)] as Polygon;
-                    g.Fill = Brushes.BurlyWood;
-                    g.Points = new PointCollection() { new Point(0, 0), new Point(watch.ElapsedMilliseconds, 0), new Point(watch.ElapsedMilliseconds, 10), new Point(0, 10) };
-                    //debugCanvas.Children[0] = g;
-            RenderTimer.Interval = new TimeSpan(0, 0, 0, 0, (int)watch.ElapsedMilliseconds + 1);
-            // tb.Text += "\n" + watch.ElapsedMilliseconds;
-            this.Dispatcher.BeginInvoke(
-                DispatcherPriority.Loaded,
-                 new Action(() =>
-                 {
-                     renderWatch.Stop();
-                     var a = debugCanvas.Children[controlledDebugCanvas.GetOrAdd("renderTimer", 0)] as Polygon;
-                     a.Points = new PointCollection() { new Point(0, 30), new Point(renderWatch.ElapsedMilliseconds, 30), new Point(renderWatch.ElapsedMilliseconds, 40), new Point(0, 40) };// "\n Took " + renderWatch.ElapsedMilliseconds + " ms";
-                 }));
-
-            return;
         }
+        public List<Face> FaceListWorld(Object3d[] input, Face[] extras)// projection onto 
+        {
+            var output = new List<Face>();
+            for (int a = 0; a < input.Length; a ++)
+            {
+                var faces = input[a].squareFaces;
+
+                for (int i = 0; i < faces.Count; i ++)
+                {
+                    var d = new Face(faces[i]);
+                    var c = d.points;
+
+                    Vector3[] points = new Vector3[c.Length];
+
+                    var minZ = Vector3.Dot(forward, c[0] - -position);
+                    for (int b = 1; b < c.Length; b++)
+                    {
+                        var dist =Vector3.Dot(forward, c[b]- -position);
+                        if (dist < minZ)
+                            minZ = dist;
+
+                    }
+                    d.z = minZ;
+                    output.Add(d);
+                }
+            }
+
+                for (int i = 0; i < extras.Length; i++)
+                {
+                var d = new Face(extras[i]);
+                    var c = d.points;
+
+                    Vector3[] points = new Vector3[c.Length];
+
+                    var minZ = Vector3.Dot(forward, c[0] - position);
+                for (int b = 1; b < c.Length; b++)
+                    {
+                        var dist = Vector3.Dot(forward, c[b] - position);
+                    if (dist < minZ)
+                            minZ = dist;
+                    }
+                d.points = points;
+                output.Add(d);
+            }
+            output.Sort(delegate (Face x, Face y)
+            {
+                if (x.z > y.z) return -1; else return 1;
+            });
+            return output;
+        }
+        public List<Face> FaceList(Object3d[] input, Face[] extras) //converts to eye space and sorts by z
+        {
+            var output = new List<Face>();
+            for (int a = 0; a < input.Length; a++)
+            {
+                var faces = input[a].squareFaces;
+
+                for (int i = 0; i < faces.Count; i++)
+                {
+                    var currentFace = faces[i].TransformAll(WorldToEye);
+                    var p = currentFace.points;
+                    currentFace.z = MathF.Min(MathF.Min(MathF.Min(p[0].Z, p[1].Z), p[2].Z), p[3].Z);
+                    //wantedFace.z = MathF.Min(MathF.Min(MathF.Min(p[0].Z, p[1].Z), p[2].Z), p[3].Z);
+                    //wantedFace.z = MathF.Max(MathF.Max(MathF.Max(p[0].Z, p[1].Z), p[2].Z), p[3].Z);
+                    //(p[0].Z + p[1].Z + p[2].Z + p[3].Z) / 4;
+                    output.Add(currentFace);
+                }
+            }
+            for (int a = 0; a < extras.Length; a++)
+            {
+                var currentFace = extras[a].TransformAll(WorldToEye);
+                var p = currentFace.points;
+                currentFace.z = MathF.Min(MathF.Min(MathF.Min(p[0].Z, p[1].Z), p[2].Z), p[3].Z);
+                output.Add(currentFace);
+            }
+            output.Sort(delegate (Face x, Face y)
+            {
+                if (x.z > y.z) return -1; else return 1;
+            });
+            return output;
+        }
+        Vector3 LinePlane(Vector3 linePos)
+        {
+            var planePoint = Vector3.UnitZ * nearPlane;
+            var planeNormal = Vector3.UnitZ;
+            var lineDir = Vector3.Normalize(-linePos);
+
+            if (Vector3.Dot(planeNormal, lineDir) == 0) return Vector3.Zero;
+
+            var t = (Vector3.Dot(planeNormal, planePoint) - Vector3.Dot(planeNormal, linePos)) / Vector3.Dot(planeNormal, lineDir);
+            var final = linePos + (lineDir * t);
+            // if (Vector3.Distance(linePos + (lineDir * distance / 2), final) < distance / 2)
+
+            return final;
+        } //not my funciton (edited and modifyed by me)
+        Vector3 LinePlane(Vector3 linePos, Vector3 planeNormal, Vector3 planePoint, Vector3 lineDir)
+        {
+            lineDir = Vector3.Normalize(lineDir);
+
+            if (Vector3.Dot(planeNormal, lineDir) == 0) return Vector3.Zero;
+
+            var t = (Vector3.Dot(planeNormal, planePoint) - Vector3.Dot(planeNormal, linePos)) / Vector3.Dot(planeNormal, lineDir);
+            var final = linePos + (lineDir * t);
+            // if (Vector3.Distance(linePos + (lineDir * distance / 2), final) < distance / 2)
+
+            return final;
+        } //not my funciton (edited and modifyed by me)
+
+        public Vector3[] PointAndPlaneWorld(Vector3[] face, float z)
+        {
+
+            var p = new List<Vector3>();
+            var aspectRatio = (float)(height / width);
+
+            var plane_width = MathF.Tan((MathF.PI / 180f) * fov / 2f) * nearPlane * 2f;
+            var plane_height = plane_width * aspectRatio;
+            var halfw = plane_width / 2f;
+            var halfh = plane_height / 2f;
+            var editedPosition = position + (forward * nearPlane);
+            for (int i = 0; i < face.Length; i++)
+            {
+                var current = face[i];
+                var edited = new Vector3(current.X, current.Y, current.Z);
+                var point = LinePlane(edited, forward, position, edited - editedPosition);
+
+                var x = Vector3.Dot(position - point, right) / plane_width;
+                var y = Vector3.Dot(position - point, up) / plane_height;
+
+                point += right * (float)width / 2f;
+                point += up * (float)height / 2f;
+
+                if (point.X > 1f) point.X = 1f;
+                if (point.X < 0f) point.X = 0f;
+                if (point.Y > 1f) point.Y = 1f;
+                if (point.Y < 0f) point.Y = 0f;
+
+                //if (x > halfw) point = point - subBackToX0 + (right * halfw);
+                //if (x < -halfw) point = point - subBackToX0 + (right * -halfw);
+                //if (y > halfh) point = point - subBackToY0 + (up * halfh);
+                //if (y < -halfh) point = point - subBackToY0 + (up * -halfh);
+                var final = position + (up * (float)height * y) + (right * (float)width * x) + (-forward * z);
+                p.Add(-final);
+
+            }
+            return p.ToArray();
+        }
+
+        public Point[] PointAndPlane(Vector3[] face)
+        {
+            var p = new List<Point>();
+            var aspectRatio = (float)(height / width);
+
+            var plane_width = MathF.Tan((MathF.PI / 180f) * fov / 2f) * nearPlane * 2f;
+            var plane_height = plane_width * aspectRatio;
+
+            var halfw = plane_width / 2f;
+            var halfh = plane_height / 2f;
+            for (int i = 0; i < face.Length; i++)
+            {
+                var current = face[i];
+                var edited = new Vector3(current.X, current.Y, current.Z);
+                if (edited.Z < nearPlane) { edited.Z = nearPlane; }
+                var point = LinePlane(edited);
+                point = new Vector3((point.X + halfw) / plane_width, (point.Y + halfh) / plane_height, 0);
+                if (point.X > 1f) point.X = 1f;
+                if (point.X < 0f) point.X = 0f;
+                if (point.Y > 1f) point.Y = 1f;
+                if (point.Y < 0f) point.Y = 0f;
+
+                p.Add(new Point((-point.X + 1f) * width, (-point.Y + 1f) * height));
+
+            }
+            return p.ToArray();
+        }
+
+        public Point[] VectorToView(Vector3[] p)
+        {
+            UpdateAuxiliaryVars();
+
+            for (int i = 0; i < p.Length; i ++)
+                p[i] = Vector3.Transform(p[i], WorldToEye);
+            return PointAndPlane(p);
+        }
+
     }
     public class PopUp
     {
@@ -1309,12 +1649,13 @@ namespace sixth3D
         public ControlledCanvas targetCanvas { get; set; }
         public UIElement[] items { get; set; }
         public string[] names { get; set; }
-        public enum PopupType {
+        public enum PopupType
+        {
             sidebar
 
-            };
+        };
 
-        public PopUp(ControlledCanvas can,PopupType tp,double width, double height, string text)
+        public PopUp(ControlledCanvas can, PopupType tp, double width, double height, string text)
         {
             ID = count++;
             targetCanvas = can;
@@ -1322,14 +1663,15 @@ namespace sixth3D
 
             float size = 1f;
 
-            string name = "UI." + ID+".";
+            string name = "UI." + ID + ".";
 
-            switch (tp) {
+            switch (tp)
+            {
                 case PopupType.sidebar:
 
-                    Polygon a = targetCanvas.GetOrAddPolygon(name+"0");
+                    Polygon a = targetCanvas.GetOrAddPolygon(name + "0");
                     var ab = new Point[]
-                    { 
+                    {
                         new Point(width, height*0.75f),
                         new Point(width, height*0.8f),
                         new Point(width * 0.9f,height*0.8f),
@@ -1345,16 +1687,16 @@ namespace sixth3D
                     b.FontWeight = FontWeights.Bold;
 
                     break;
-            
-            
+
+
             }
         }
     }
     public class ControlledCanvas
     {
         public Canvas canvas { get; }
-        public List<string> names = new List<string>() ;
-        public List<int> used = new List<int>() ;
+        public List<string> names = new List<string>();
+        public List<int> used = new List<int>();
         public int alwaysAllocated = 2;
         public ControlledCanvas(Canvas c)
         {
@@ -1381,7 +1723,7 @@ namespace sixth3D
                     return i;
                 }
             }
-            
+
             if (type == 0)
             {
                 canvas.Children.Add(NewPolygon());
@@ -1448,7 +1790,7 @@ namespace sixth3D
         }
         public void ClearUnsed()
         {
-            for (int i = canvas.Children.Count-1; i > -1; i--)
+            for (int i = canvas.Children.Count - 1; i > -1; i--)
             {
                 if (used[i] == 0 && i > alwaysAllocated)
                 {
@@ -1474,7 +1816,8 @@ namespace sixth3D
         }
         Polyline NewPolyline()
         {
-            Polyline p = new Polyline() {
+            Polyline p = new Polyline()
+            {
                 Stroke = Brushes.Black,
                 Fill = Brushes.LightBlue,
                 StrokeThickness = 1.5f,
@@ -1483,99 +1826,6 @@ namespace sixth3D
             return p;
 
         }
-    }
-    public class Camera
-    {
-        public Vector3 position { get; set; } = Vector3.Zero;
-        /// <summary> rad
-        public Vector3 rotation { get; set; } = Vector3.UnitZ * MathF.PI;
-
-        public Vector3 forward { get; set; } = Vector3.UnitZ;
-        public Vector3 up { get; set; } = -Vector3.UnitY;
-        public Vector3 right { get; set; } = Vector3.UnitX;
-
-        public float nearPlane { get; set; } = 10f;
-
-        public Canvas[] output { get; set; }
-
-        public float fov { get; set; } = 100f;
-        public Matrix4x4 WorldToEye { get; set; }
-
-        public void UpdateWorldToEye()
-        {
-            var x = Matrix4x4.CreateRotationX(rotation.X);
-            var y = Matrix4x4.CreateRotationY(rotation.Y);
-            var z = Matrix4x4.CreateRotationZ(rotation.Z);
-            var pos = Matrix4x4.CreateTranslation(position);
-            WorldToEye = pos * z * y * x;
-        }
-
-        public void FindForward()
-        {
-            var x = Matrix4x4.CreateRotationX(rotation.X);
-            var y = Matrix4x4.CreateRotationY(rotation.Y);
-            var z = Matrix4x4.CreateRotationZ(rotation.Z);
-            var fullMatrix = z * y * x;
-
-
-            forward = Vector3.Transform(Vector3.UnitZ, fullMatrix);
-            right = Vector3.Transform(Vector3.UnitX, fullMatrix);
-            up = Vector3.Transform(-Vector3.UnitY, fullMatrix);
-        }
-        public Point[] FacePoints(Face face, float Width, float Height)
-        {
-            var p = new List<Point>();
-            var points = face.points;
-            for (int i = 0; i < points.Length; i++)
-            {
-                p.Add(new Point((int)((fov / (fov + points[i].Z)) * points[i].X) + (Width / 2), (int)((fov / (fov + points[i].Z)) * points[i].Y) + (Height / 2)));
-            }
-            face.visual = p.ToArray();
-            return p.ToArray();
-        }
-        Vector3 LinePlane(Vector3 linePos)
-        {
-            var planePoint = Vector3.UnitZ * nearPlane;
-            var planeNormal = Vector3.UnitZ;
-            var lineDir = Vector3.Normalize(- linePos);
-
-            if (Vector3.Dot(planeNormal, lineDir) == 0) return Vector3.Zero;
-
-            var t = (Vector3.Dot(planeNormal, planePoint) - Vector3.Dot(planeNormal, linePos)) / Vector3.Dot(planeNormal, lineDir);
-            var final = linePos + (lineDir * t);
-            // if (Vector3.Distance(linePos + (lineDir * distance / 2), final) < distance / 2)
-
-            return final;
-        } //not my funciton (edited and modifyed by me)
-
-        public float planeSize { get; set; } = 10f;
-
-        public bool update = true;
-        public Point[] PointAndPlane(Vector3[] face, double width, double height)
-        {
-            var p = new List<Point>();
-            var invAspectRatio = (float)(width / height);
-            var plane_height = MathF.Tan((MathF.PI / 180f) * fov) * nearPlane * 2f;
-            var plane_width = plane_height * invAspectRatio;
-
-            for (int i = 0; i < face.Length; i++)
-            {
-                var current = face[i];
-                var edited = new Vector3(current.X, current.Y, current.Z);
-                if (edited.Z < nearPlane) edited.Z = nearPlane;
-                var point = LinePlane(edited);
-                point = new Vector3(point.X / plane_width + 0.5f, point.Y / plane_height + 0.5f, 0);
-                if (point.X > 1f) point.X = 1f;
-                if (point.X < 0f) point.X =0f;
-                if (point.Y > 1f) point.Y = 1f;
-                if (point.Y < 0f) point.Y = 0f;
-
-                p.Add(new Point((point.X)* width, (point.Y)*height));
-                
-            }
-            return p.ToArray();
-        }
-
     }
     public class Face //faces are ONLY used to RENDER faces should not be used for raycasting or physics
     {
@@ -1602,27 +1852,23 @@ namespace sixth3D
         }
         public Face TransformAll(Matrix4x4 m)
         {
+            var f = new Face(this);
+
             Vector3[] transformed = points;
             for (int i = 0; i < points.Length; i++)
             {
                 transformed[i] = Vector3.Transform(points[i], m);
             }
-            return new Face(transformed);
+            f.points = transformed;
+            return f;
         }
-        float focalDistance = 100f;
-        public Point[] ScreenPos(float fov, float Height, float Width, Vector2 bounds)
+        public Face(Face f)
         {
-            var p = new List<Point>();
-            for (int i = 0; i < points.Length; i++)
-            {
-                var fz = fov / (fov + points[i].Z);
-                var x = (int)(fz * points[i].X) + (Width / 2);
-                var y = (int)(fz * points[i].Y) + (Height / 2);
-
-                p.Add(new Point(x, y));
-            }
-            visual = p.ToArray();
-            return p.ToArray();
+            points = f.points;
+            color = f.color;
+            visual = f.visual;
+            z = f.z;
+            effects = f.effects;
         }
         public Face(Vector3[] p)
         {
